@@ -1,6 +1,18 @@
-vxfld (1.0-1) unstable; urgency=low
+python-vxfld (2.0) unstable; urgency=low
+
+  * New maintainer
+  * merged code from https://github.com/metacloud/vxfld
+    - SND database sync at startup
+    - ability to run as non-priveleged user
+    - tiered replication/flooding
+  * head end replication
+  * eventlet for improved concurrency
+  * pep8
+
+ -- Sameer Ladiwala <sameer@cumulusnetworks.com>  Thu, 08 Oct 2015 18:26:10 -0700
+
+python-vxfld (1.0-1) unstable; urgency=low
 
   * Initial release
 
  -- Nolan Leake <nolan@cumulusnetworks.com>  Fri, 11 Jul 2014 17:45:00 +0000
-

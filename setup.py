@@ -1,24 +1,33 @@
+#!/usr/bin/env python
 from setuptools import setup, find_packages
 
 setup(
-    name="vxfld",
-    version="1.0",
-    packages=find_packages(),
+    name='vxfld',
+    version='2.0',
+    description='VXLAN Flooding Service',
+    author='Cumulus Networks/Metacloud Engineering',
+    author_email='info@cumulusnetworks.com',
+    url='cumulusnetworks.com',
     scripts=[
-        'bin/vxsnd',
         'bin/vxrd',
+        'bin/vxrdctl',
+        'bin/vxsnd',
+        'bin/vxsndctl'
     ],
-
+    setup_requires=[
+        'setuptools>=0.6cc1'
+    ],
+    packages=find_packages(),
+    include_package_data=True,
+    zip_safe=False,
     install_requires=[
-        'python-daemon',
-        'dpkt',
-        'pyip',
-        'docopt',
+        'python-daemon==1.5.5',
+        'dpkt==1.8.6.2',
+        'docopt==0.6.1',
+        'eventlet>=0.17'
     ],
-
-    # metadata for upload to PyPI
-    author="Cumulus Networks/Metacloud Engineering",
-    author_email="info@cumulusnetworks.com",
-    description="VXLAN Flooding Service",
-    license="GPLv2",
+    data_files=[
+        ('/etc', ['etc/vxrd.conf', 'etc/vxsnd.conf'])
+    ],
+    license='GPLv2'
 )

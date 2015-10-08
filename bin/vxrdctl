@@ -1,0 +1,130 @@
+#!/usr/bin/python
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+# Copyright 2014, 2015 Cumulus Networks, Inc. All rights reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc.
+# 51 Franklin Street, Fifth Floor
+# Boston, MA  02110-1301, USA.
+""" Control program for managing vxrd.
+"""
+import json
+import sys
+
+from docopt import docopt, DocoptExit
+
+from vxfld.common import mgmt, utils
+
+
+def main():
+    """
+    Usage:
+        vxrdctl -h
+        vxrdctl [-u UDS_FILE] [-j] get config [<parameter>]
+        vxrdctl [-u UDS_FILE] [-j] vxlans [hrep]
+        vxrdctl [-u UDS_FILE] [-j] peers
+
+    Options:
+        -h, --help   : Show this screen and exit
+        -u UDS_FILE  : File name for Unix domain socket
+                       [default: /var/run/vxrd.sock]
+        -j           : Print result as json string
+
+    Commands:
+        get config: print the vxrd configuration
+        get config <parameter>: print single vxrd config option
+        vxlans: get the current set of vxlans the RD has reported to the snd
+        vxlans hrep: get the HREP mac addrs for the vxlan device
+        peers:  get the list of vtep peers reported back by the snd
+    """
+    args = docopt(main.__doc__, argv=sys.argv[1:] or ['-h'])
+    mgmt_client = mgmt.MgmtClient(args['-u'])
+    resp, err = mgmt_client.sendobj(args)
+    if err:
+        raise Exception('Error return: "%s"' % err)
+    if args['-j'] and not args['config']:
+        print json.dumps(resp, cls=utils.SetEncoder)
+    elif args['vxlans']:
+        if args['hrep']:
+            if resp is None:
+                print (
+                    'Head-end replication is turned off on this device.\n'
+                    'This command will not provide any output'
+                )
+            else:
+                fmt = '{:<8}    {:<12}    {:<60}'
+                print fmt.format('VNI', 'Device', 'HREP Addrs')
+                print fmt.format('===', '======', '==========')
+                if resp:
+                    for vni in sorted(resp.keys()):
+                        display = [vni, resp[vni].dev_name]
+                        addr_per_line = 4
+                        hrep_addrs = sorted(resp[vni].hrep_addrs)
+                        for idx in range(0, max(len(hrep_addrs), 1),
+                                         addr_per_line):
+                            hrep_addr_str = (
+                                ', '.join(hrep_addrs[idx:idx+addr_per_line])
+                            ) or 'None'
+                            if idx == 0:
+                                display.append(hrep_addr_str)
+                            else:
+                                display = ['', '', hrep_addr_str]
+                            print fmt.format(*display)
+                else:
+                    print 'None'
+        else:
+            fmt = '{:<8}    {:<12}    {:<12}'
+            print fmt.format('VNI', 'Local Addr', 'Svc Node')
+            print fmt.format('===', '==========', '========')
+            if resp:
+                for vni in sorted(resp):
+                    print fmt.format(vni, resp[vni].localip,
+                                     resp[vni].svcnodeip)
+            else:
+                print 'None'
+    elif args['peers']:
+        if resp is None:
+            print (
+                'Head-end replication is turned off on this device.\n'
+                'This command will not provide any output'
+            )
+            return 0
+        addr_per_line = 4
+        fmt = '{:<8}    {:<60}'
+        print fmt.format('VNI', 'Peer Addrs')
+        print fmt.format('===', '==========')
+        if resp:
+            for vni in sorted(resp.keys()):
+                peer_addresses = sorted(resp[vni])
+                for idx in range(0, len(peer_addresses), addr_per_line):
+                    peer_addr_str = ', '.join(
+                        peer_addresses[idx:idx+addr_per_line])
+                    print fmt.format(vni if idx == 0 else '', peer_addr_str)
+        else:
+            print 'None'
+    elif args['get'] and args['config']:
+        print json.dumps(resp, sort_keys=True, indent=4,
+                         separators=(',', ': '))
+    return 0
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except DocoptExit as ex:
+        print ex
+    except SystemExit:
+        pass
+    except Exception as ex:  # pylint: disable=broad-except
+        sys.stderr.write('%s\n' % ex)
+        sys.exit(1)

@@ -1,0 +1,79 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          vxrd
+# Required-Start:    $network $local_fs $syslog
+# Required-Stop:     $network $local_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Lightweight Network Virtualization Peer Discovery Daemon
+### END INIT INFO
+
+NAME=vxrd
+DAEMON=/usr/bin/${NAME}
+DAEMON_ARGS="-d"
+PIDFILE=/var/run/${NAME}.pid
+
+# Read configuration variable file if it is present
+[ -r /etc/default/${NAME} ] && . /etc/default/${NAME}
+
+#include for status_of_proc
+. /lib/lsb/init-functions
+
+# Check if daemon is enabled to run
+check_enabled()
+{
+	# Run only if enabled
+	case "$START" in
+	  yes)
+	      ;;
+	  *)
+	      log_action_msg "$NAME is not configured to start"
+	      exit 0
+	      ;;
+	esac
+}
+
+do_start()
+{
+    check_enabled
+    log_begin_msg "Starting $DAEMON ..."
+    start-stop-daemon --start --quiet --pidfile ${PIDFILE} --exec ${DAEMON} \
+    -- ${DAEMON_ARGS} || return 2
+}
+
+do_stop()
+{
+    if [ -e "$PIDFILE" ]; then
+        start-stop-daemon --stop --quiet --retry=TERM/10/KILL/5 \
+        --pidfile ${PIDFILE} --name ${NAME} || return 2
+    fi
+}
+
+
+case "$1" in
+start)
+	do_start
+	case "$?" in
+		0|1) log_end_msg 0 ;;
+		2) log_end_msg 1 ;;
+	esac
+	;;
+stop)
+	do_stop
+	;;
+status)
+    check_enabled
+    status_of_proc "$DAEMON" "$NAME" && exit 0 || exit $?
+    ;;
+restart)
+	$0 stop
+	sleep 1
+	$0 start
+	;;
+*)
+	echo "Usage: /etc/init.d/$NAME {start|stop|restart|status}"
+	exit 1
+	;;
+esac
+
+exit 0

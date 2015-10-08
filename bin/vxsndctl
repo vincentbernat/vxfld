@@ -1,0 +1,116 @@
+#!/usr/bin/python
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+# Copyright 2014, 2015 Cumulus Networks, Inc. All rights reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc.
+# 51 Franklin Street, Fifth Floor
+# Boston, MA  02110-1301, USA.
+""" Control program for managing vxsnd.
+"""
+import json
+import sys
+
+from docopt import docopt, DocoptExit
+
+from vxfld.common import mgmt
+
+
+def main():
+    """
+    Usage:
+        vxsndctl -h
+        vxsndctl [-u UDS_FILE] [-j] fdb
+        vxsndctl [-u UDS_FILE] [-j] fdb (add <vni> <ip> | del <vni> <ip>)
+        vxsndctl [-u UDS_FILE] [-j] get config [<parameter>]
+        vxsndctl [-u UDS_FILE] [-j] set config <parameter> [<value>]
+        vxsndctl [-u UDS_FILE] [-j] set debug (on | off)
+        vxsndctl [-u UDS_FILE] [-j] show [detail]
+
+    Options:
+        -h, --help   : Show this screen and exit
+        -u UDS_FILE  : File name for Unix domain socket
+                       [default: /var/run/vxsnd.sock]
+        -j           : Print result as json string
+
+    Commands:
+        fdb: print the vxsnd forwarding DB
+        get config: print the vxsnd configuration
+        get config <parameter>: print single vxsnd config option
+        set config <parameter> [<value>]: set a single vxsnd config option
+        set debug on: enable debug mode and set loglevel to debug
+        set debug off: disable debug mode and set loglevel to previous level
+        show: print a snapshot of the runtime configuration
+        show detail: print a detailed snapshot of the runtime configuration
+    """
+    args = docopt(main.__doc__, argv=sys.argv[1:] or ['-h'])
+    mgmt_client = mgmt.MgmtClient(args['-u'])
+    resp, err = mgmt_client.sendobj(args)
+    if err:
+        raise Exception('Error return: "%s"' % err)
+
+    if args['-j'] and not args['config']:
+        print json.dumps(resp)
+    elif args['fdb']:
+        # This was a fdb request
+        fmt = '{:<8}    {:<8}    {:<8}'
+        print fmt.format('VNI', 'Address', 'Ageout')
+        print fmt.format('===', '=======', '======')
+        for vni in sorted(resp.keys()):
+            vni_out = vni
+            for ip_addr in sorted(resp[vni].keys()):
+                print fmt.format(vni_out, ip_addr, resp[vni][ip_addr])
+    elif args['get'] and args['config']:
+        print json.dumps(resp, sort_keys=True, indent=4,
+                         separators=(',', ': '))
+    elif args['set'] and args['config']:
+        print json.dumps(resp, sort_keys=True, indent=4,
+                         separators=(',', ': '))
+    elif args['show']:
+        fmt = '{:<15}    {:<15}    {:<40}'
+        addr_per_line = 2
+        print fmt.format('Local address', 'Anycast address', 'Peer Addresses')
+        print fmt.format('=============', '===============', '==============')
+        if resp:
+            peer_addresses = sorted(resp['peers'])
+            for idx in range(0, max(len(peer_addresses), 1), addr_per_line):
+                peer_addr_str = ', '.join(
+                    peer_addresses[idx:idx+addr_per_line])
+                if idx == 0:
+                    print fmt.format(resp['local'], resp['anycast'],
+                                     peer_addr_str)
+                else:
+                    print fmt.format('', '', peer_addr_str)
+            if args['detail']:
+                fmt = '{:<34}    {:<30}'
+                print
+                print fmt.format('Data (UDP) Port', 'Control (UDP) Port')
+                print fmt.format('==============', '=================')
+                print fmt.format(resp['data_port'], resp['ctrl_port'])
+        else:
+            print 'None'
+    else:
+        print '%r' % resp
+    return 0
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except DocoptExit as ex:
+        print ex
+    except SystemExit:
+        pass
+    except Exception as ex:  # pylint: disable=broad-except
+        sys.stderr.write('%s\n' % ex)
+        sys.exit(1)

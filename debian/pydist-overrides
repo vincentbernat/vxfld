@@ -1,0 +1,4 @@
+python_daemon python-daemon
+dpkt python-dpkt
+docopt python-docopt
+eventlet python-eventlet

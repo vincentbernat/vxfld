@@ -1,33 +1,16 @@
-Source: vxfld
-Maintainer: Michael Fine <mfine@cumulusnetworks.com>
+Source: python-vxfld
+Maintainer: Sameer Ladiwala <sameer@cumulusnetworks.com>
 Section: net
 Priority: optional
-Build-Depends: python-all (>= 2.6.6-3),
+Build-Depends:
  debhelper (>= 7),
+ python-all (>= 2.6.6-3),
  python-setuptools,
- python-docutils
+ python-sphinx (>= 1.0.7+dfsg)
 Standards-Version: 3.9.1
 X-Python-Version: >= 2.7
 
-Package: vxfld-common
+Package: python-vxfld
 Architecture: all
-Depends: ${misc:Depends},
- python (>= 2.7),
- python-dpkt,
- python-daemon,
- python-docopt,
- python-pyip
-Description: Common files for vxfld packages
-
-Package: vxfld-vxsnd
-Architecture: all
-Depends: ${misc:Depends},
-  vxfld-common
-Description: VXLAN Replicator Service Node Daemon
-
-Package: vxfld-vxrd
-Architecture: all
-Depends: ${misc:Depends},
-  vxfld-common
-Description: VXLAN VTEP Registration Daemon
-
+Depends: ${misc:Depends}, ${python:Depends}, ${sphinxdoc:Depends}
+Description: VXLAN Flooding Service

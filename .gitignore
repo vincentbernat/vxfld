@@ -4,3 +4,4 @@
 *.swo
 *.swp
 .idea/
+build/

@@ -1,0 +1,121 @@
+_vxfldcommon()
+{
+    local commands word1_func word2_func completion_string
+    local cur prev words cword command
+    [ ! -z $1 ] && commands=$1
+    [ ! -z $2 ] && word1_func=$2
+    [ ! -z $3 ] && word2_func=$3
+    _init_completion || return
+    command=${words[${cword} - 1]}
+    case ${cword} in
+        1)
+            completion_string="-h -j -u $( ${commands} )"
+            ;;
+        2)
+            case ${words[1]} in
+                -j)
+                    # -j
+                    completion_string="-u $( ${commands} )"
+                    ;;
+                -u)
+                    # -u
+                    COMPREPLY=( $( compgen -f "${cur}" ) )
+                    [[ -d ${COMPREPLY} ]] && compopt -o nospace
+                    ;;
+                *)
+                    # <word1>
+                    completion_string=$( ${word1_func} ${command} )
+            esac
+            ;;
+        3)
+            case ${words[1]} in
+                -j)
+                    # -j
+                    case ${command} in
+                        -u)
+                            # -j -u
+                            COMPREPLY=( $( compgen -f "${cur}" ) )
+                            [[ -d ${COMPREPLY} ]] && compopt -o nospace
+                            ;;
+                        *)
+                            # -j <word2>
+                            completion_string=$( ${word1_func} ${command} )
+                            ;;
+                    esac
+                    ;;
+                -u)
+                    # -u <UDS>
+                    completion_string="-j $( ${commands} )"
+                    ;;
+                *)
+                    # <word1> <word2>
+                    completion_string=$( ${word2_func} ${words[1]} ${command} )
+                    ;;
+            esac
+            ;;
+        4)
+            case ${words[1]} in
+                -j)
+                    # -j
+                    case ${words[2]} in
+                        -u)
+                            # -j -u <UDS>
+                            completion_string="$( ${commands} )"
+                            ;;
+                        *)
+                            # -j <word2> <word3>
+                            completion_string=$( ${word2_func} ${words[2]} \
+                                                 ${command} )
+                            ;;
+                    esac
+                    ;;
+                -u)
+                    # -u <UDS>
+                    case ${command} in
+                        -j)
+                            # -u <UDS> -j
+                            completion_string="$( ${commands} )"
+                            ;;
+                        *)
+                            # -u <UDS> <word3>
+                            completion_string=$( ${word1_func} ${command} )
+                    esac
+                    ;;
+            esac
+            ;;
+        5)
+            case ${words[1]} in
+                -j)
+                    if [ ${words[2]} == "-u" ]; then
+                        # -j -u <UDS> <word4>
+                        completion_string=$( ${word1_func} ${command} )
+                    fi
+                    ;;
+                -u)
+                    # -u <UDS>
+                    case ${words[3]} in
+                        -j)
+                            # -u <UDS> -j <word4>
+                            completion_string=$( ${word1_func} ${command} )
+                            ;;
+                        *)
+                            # -u <UDS> <word3> <word4>
+                            completion_string=$( ${word2_func} ${words[3]} \
+                                                 ${command} )
+                            ;;
+                    esac
+                    ;;
+            esac
+            ;;
+        6)
+            if [ \( ${words[1]} == "-j" \) -a \( ${words[2]} == "-u" \) -o \
+                 \( ${words[1]} == "-u" \) -a \( ${words[3]} == "-j" \) ]; then
+                # -j -u <UDS> <word4> <word5>
+                # -u <UDS> -j <word4> <word5>
+                 completion_string=$( ${word2_func} ${words[4]} ${command} )
+            fi
+            ;;
+    esac
+    [[ ! -z ${completion_string} ]] && \
+    COMPREPLY=( $( compgen -W "${completion_string}" -- "${cur}" ) )
+}

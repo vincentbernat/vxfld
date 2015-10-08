@@ -1,0 +1,65 @@
+# -*- Shell-script -*- let emacs know it's bash
+# Bash completion for vxrdctl
+
+_vxrd_config_params=
+
+_vxrd_commands() {
+   echo "get peers vxlans"
+}
+
+_vxrd_get() {
+    local command=$1
+    if [ -z ${command} ]; then
+       # get
+       echo "config"
+    else
+       case ${command} in
+           # get config
+           config)
+               echo "$_vxrd_config_params"
+               ;;
+       esac
+    fi
+}
+
+_vxrd_word1_func() {
+    local word1=$1
+    case ${word1} in
+        get)
+            # get
+            echo $( _vxrd_get )
+            ;;
+        vxlans)
+            # vxlans
+            echo "hrep"
+            ;;
+    esac
+}
+
+_vxrd_word2_func() {
+    local word1=$1
+    local word2=$2
+    case ${word1} in
+        get)
+            # get config
+            echo $( _vxrd_get ${word2} )
+            ;;
+    esac
+}
+
+_vxrdctl() {
+    if [ -z "${_vxrd_config_params}" ]; then
+        _vxrd_config_params=$(/usr/bin/env python -c "from vxfld.common \
+        import utils; utils.get_config_params('vxrd')" 2>/dev/null)
+    fi
+    _vxfldcommon _vxrd_commands _vxrd_word1_func _vxrd_word2_func
+} && complete -F _vxrdctl vxrdctl
+
+# Local variables:
+# mode: shell-script
+# sh-basic-offset: 4
+# sh-indent-comment: t
+# indent-tabs-mode: nil
+# End:
+# ex: ts=4 sw=4 et filetype=sh
+

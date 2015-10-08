@@ -9,19 +9,29 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
-build:
-	@ mkdir -p man
-	rst2man vxsnd.rst > man/vxsnd.man
-	rst2man vxrd.rst > man/vxrd.man
-
-
 %:
-	dh $@
+	dh $@ --buildsystem=python_distutils --with python2,sphinxdoc
+
+override_dh_auto_build:
+	dh_auto_build
+	rm -rf build/man
+	PYTHONPATH=. http_proxy='127.0.0.1:9' sphinx-build -N -bman doc/source build/man
+
+override_dh_auto_install:
+	set -e && for pyvers in $(shell pyversions -r); do \
+		$$pyvers setup.py install --install-layout=deb \
+		--root $(CURDIR)/debian/python-vxfld; \
+	done
+
+override_dh_clean:
+	dh_clean -O--buildsystem=python_distutils
+	rm -rf build __pycache__
+	rm -rf *.egg-info
 
 override_dh_installinit:
 	dh_installinit --name=vxsnd
 	dh_installinit --name=vxrd
 
-
-override_dh_pysupport:
+override_dh_sphinxdoc:
+	rm -rf $$(pwd)/debian/python-vxfld/usr/share/doc/python-vxfld/man/.doctrees
 

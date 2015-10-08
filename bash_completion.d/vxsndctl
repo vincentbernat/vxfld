@@ -1,0 +1,109 @@
+# -*- Shell-script -*- let emacs know it's bash
+# Bash completion for vxrdctl
+
+_vxsnd_config_params=
+_vxsnd_rel_config_params=
+
+_vxsnd_commands() {
+   echo "get fdb show set"
+}
+
+_vxsnd_fdb() {
+    echo "add del"
+}
+
+_vxsnd_get() {
+    local command=$1
+    if [ -z ${command} ]; then
+       # get
+       echo "config"
+    else
+       case ${command} in
+           # get config
+           config)
+               echo "$_vxsnd_config_params"
+               ;;
+       esac
+    fi
+}
+
+_vxsnd_set() {
+    local command=$1
+    if [ -z ${command} ]; then
+       # set
+       echo "config debug"
+    else
+       case ${command} in
+           config)
+               # set config
+               echo "$_vxsnd_rel_config_params"
+               ;;
+           debug)
+               # set debug
+               echo "on off"
+               ;;
+       esac
+    fi
+}
+
+_vxsnd_show() {
+    echo "detail"
+}
+
+_vxsnd_word1_func() {
+    local word1=$1
+    case ${word1} in
+        fdb)
+            # fdb
+            echo $( _vxsnd_fdb )
+            ;;
+        get)
+            # get
+            echo $( _vxsnd_get )
+            ;;
+        set)
+            # set
+            echo $( _vxsnd_set )
+            ;;
+        show)
+            # show
+            echo $( _vxsnd_show )
+            ;;
+    esac
+}
+
+_vxsnd_word2_func() {
+    local word1=$1
+    local word2=$2
+    case ${word1} in
+        get)
+            # get config
+            echo $( _vxsnd_get ${word2} )
+            ;;
+        set)
+            # set config/debug
+            echo $( _vxsnd_set ${word2} )
+            ;;
+    esac
+}
+
+_vxsndctl() {
+   if [ -z "${_vxsnd_config_params}" -o -z "${_vxsnd_rel_config_params}" ]
+   then
+      _vxsnd_config_params=$(/usr/bin/env python -c "from vxfld.common \
+      import utils; utils.get_config_params('vxsnd')" 2>/dev/null)
+      _vxsnd_rel_config_params=$(/usr/bin/env python -c "from vxfld.common \
+      import utils; utils.get_config_params('vxsnd', reloadable=True)" \
+      2>/dev/null)
+   fi
+    _vxfldcommon _vxsnd_commands _vxsnd_word1_func _vxsnd_word2_func
+} && complete -F _vxsndctl vxsndctl
+
+# Local variables:
+# mode: shell-script
+# sh-basic-offset: 4
+# sh-indent-comment: t
+# indent-tabs-mode: nil
+# End:
+# ex: ts=4 sw=4 et filetype=sh
+
