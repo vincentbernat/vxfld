@@ -43,7 +43,7 @@ Registration node
 Refer to the *Configuring the Registration Node* section in the
 `LNV user guide`_. Launch the daemon by running::
 
-  /usr/bin/vxrd -d
+  /usr/bin/env vxrd -d
 
 Service node
 ------------
@@ -51,13 +51,13 @@ Service node
 Refer to the *Configuring the Service Node* section in the
 `LNV user guide`_. Launch the daemon by running::
 
-  /usr/bin/vxsnd -d
+  /usr/bin/env vxsnd -d
 
 Documentation
 =============
 
 Cumulus Networks `LNV user guide`_.
 
-.. _LNV user guide: http://docs.cumulusnetworks.com/display/CL254/Lightweight+Network+Virtualization+-+LNV
+.. _LNV user guide: http://docs.cumulusnetworks.com/display/DOCS/Lightweight+Network+Virtualization+-+LNV
 .. _vxsnd: https://github.com/CumulusNetworks/vxfld/blob/master/vxsnd.rst
 .. _vxrd: https://github.com/CumulusNetworks/vxfld/blob/master/vxrd.rst
