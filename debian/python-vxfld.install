@@ -1,4 +1,4 @@
-bash_completion.d/	etc/bash_completion.d
+bash_completion.d/*	etc/bash_completion.d/
 debian/vxrd-monit.rc	etc/monit/monitrc.d/
 debian/vxsnd-monit.rc	etc/monit/monitrc.d/
-
+etc/*			etc/

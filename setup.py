@@ -26,8 +26,5 @@ setup(
         'docopt==0.6.1',
         'eventlet>=0.17'
     ],
-    data_files=[
-        ('/etc', ['etc/vxrd.conf', 'etc/vxsnd.conf'])
-    ],
     license='GPLv2'
 )

@@ -15,11 +15,11 @@ Installation
 
 Install using pip::
 
-  sudo pip install git+https://github.com/CumulusNetworks/vxfld.git
+  pip install git+https://github.com/CumulusNetworks/vxfld.git
 
 or install from source::
 
-  sudo python setup.py install
+  python setup.py install
 
 Building and installing man pages
 =================================
@@ -43,7 +43,11 @@ Registration node
 Refer to the *Configuring the Registration Node* section in the
 `LNV user guide`_. Launch the daemon by running::
 
-  /usr/bin/env vxrd -d
+  sudo /path/to/vxrd -d
+
+or to run as non-sudo::
+
+  /path/to/vxrd -d -p /path/to/vxrd.pid -u /path/to/vxrd.sock [ -c /path/to/vxrd.conf ]
 
 Service node
 ------------
@@ -51,7 +55,14 @@ Service node
 Refer to the *Configuring the Service Node* section in the
 `LNV user guide`_. Launch the daemon by running::
 
-  /usr/bin/env vxsnd -d
+  sudo /path/to/vxsnd -d
+
+or to run as non-sudo::
+
+  /path/to/vxsnd -d -p /path/to/vxsnd.pid -u /path/to/vxsnd.sock --no-flood [ -c /path/to/vxsnd.conf ]
+
+Note: software replication requires root priveleges to bind to raw sockets;
+--no-flood disables it.
 
 Documentation
 =============

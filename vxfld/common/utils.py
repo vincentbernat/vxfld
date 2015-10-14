@@ -96,6 +96,10 @@ def common_parser(node_name, node_type):
     prsr.add_argument('-d', '--daemon',
                       action='store_true',
                       help='Run as a daemon program')
+    prsr.add_argument('-p', '--pidfile',
+                      help='File to write the process ID')
+    prsr.add_argument('-u', '--udsfile',
+                      help='Unix domain socket for mgmt interface')
     prsr.add_argument('-D', '--debug',
                       action='store_true',
                       help='Turn on extra debug mode')

@@ -656,7 +656,7 @@ def main():
     prsr = utils.common_parser(_NODE_NAME, NODE_TYPE)
     # For running non-sudo.  Disables bind to raw socket
     prsr.add_argument('-R', '--no-flood', action='store_true',
-                      help=argparse.SUPPRESS)
+                      help='Turn off flooding')
     args = prsr.parse_args()
     conf = utils.load_configuration(args)
     vxsnd_inst = _Vxsnd(conf)
