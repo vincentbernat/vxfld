@@ -237,7 +237,7 @@ class _Vxrd(service.Vxfld):
                 match_dict = pat_match.groupdict()
                 vni = int(match_dict['vni'])
                 if (
-                        match_dict['dstport'] is None or
+#                        match_dict['dstport'] is None or
                         match_dict['local_addr'] is None or
                         (not self._conf.head_rep and
                          match_dict['sn_addr'] is None)
