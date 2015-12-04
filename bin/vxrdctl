@@ -22,9 +22,7 @@
 import json
 import sys
 
-from docopt import docopt, DocoptExit
-
-from vxfld.common import mgmt, utils
+from docopt import DocoptExit
 
 
 def main():
@@ -32,8 +30,9 @@ def main():
     Usage:
         vxrdctl -h
         vxrdctl [-u UDS_FILE] [-j] get config [<parameter>]
-        vxrdctl [-u UDS_FILE] [-j] vxlans [hrep]
-        vxrdctl [-u UDS_FILE] [-j] peers
+        vxrdctl [-u UDS_FILE] [-j] vxlans [hrep] [<vni>]
+        vxrdctl [-u UDS_FILE] [-j] peers [<vni>]
+        vxrdctl [-u UDS_FILE] [-j] show
 
     Options:
         -h, --help   : Show this screen and exit
@@ -45,9 +44,15 @@ def main():
         get config: print the vxrd configuration
         get config <parameter>: print single vxrd config option
         vxlans: get the current set of vxlans the RD has reported to the snd
-        vxlans hrep: get the HREP mac addrs for the vxlan device
+        vxlans hrep: print the HREP addrs for the vxlan devices
         peers:  get the list of vtep peers reported back by the snd
+        peers <vni>:  get the list of vtep peers reported back by the snd for
+                      a vni
+        show: print a snapshot of the runtime configuration
     """
+    from docopt import docopt
+    from vxfld.common import mgmt, utils
+
     args = docopt(main.__doc__, argv=sys.argv[1:] or ['-h'])
     mgmt_client = mgmt.MgmtClient(args['-u'])
     resp, err = mgmt_client.sendobj(args)
@@ -116,6 +121,14 @@ def main():
     elif args['get'] and args['config']:
         print json.dumps(resp, sort_keys=True, indent=4,
                          separators=(',', ': '))
+    elif args['show']:
+        print 'Protocol version: %s' % resp['version']
+        fmt = '{:<15}    {:<15}    {:<15}'
+        print fmt.format('Local address', 'Svcnode address', 'Head rep.')
+
+        print fmt.format('=============', '===============', '=========')
+        print fmt.format(resp['src_ip'], resp['snd_ip'],
+                         'Enabled' if resp['head_rep'] else 'Disabled')
     return 0
 
 if __name__ == '__main__':
@@ -123,7 +136,7 @@ if __name__ == '__main__':
         sys.exit(main())
     except DocoptExit as ex:
         print ex
-    except SystemExit:
+    except (KeyboardInterrupt, SystemExit):
         pass
     except Exception as ex:  # pylint: disable=broad-except
         sys.stderr.write('%s\n' % ex)

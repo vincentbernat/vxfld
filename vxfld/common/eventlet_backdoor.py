@@ -32,6 +32,17 @@ def _dont_use_this():
     print 'Don\'t use this, just disconnect instead'
 
 
+def _displayhook(val):
+    """ The standard sys.displayhook will print the value of
+    the last expression and set it to __builtin__._, which overwrites
+    the __builtin__._ that gettext sets. Let's switch to using pprint
+    since it won't interact poorly with gettext, and it's easier to
+    read the output too.
+    """
+    if val is not None:
+        pprint.pprint(val)
+
+
 def _find_objects(instance_type):
     """ Find objects by type.
     """
@@ -56,17 +67,6 @@ def _print_nativethreads():
         print thread_id
         traceback.print_stack(stack)
         print
-
-
-def _displayhook(val):
-    """ The standard sys.displayhook will print the value of
-    the last expression and set it to __builtin__._, which overwrites
-    the __builtin__._ that gettext sets. Let's switch to using pprint
-    since it won't interact poorly with gettext, and it's easier to
-    read the output too.
-    """
-    if val is not None:
-        pprint.pprint(val)
 
 
 def initialize_if_enabled(backdoor_port):

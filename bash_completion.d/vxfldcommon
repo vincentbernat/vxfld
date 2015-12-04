@@ -19,8 +19,8 @@ _vxfldcommon()
                     ;;
                 -u)
                     # -u
-                    COMPREPLY=( $( compgen -f "${cur}" ) )
-                    [[ -d ${COMPREPLY} ]] && compopt -o nospace
+                    # autocomplete file path
+                    completion_string="filepath"
                     ;;
                 *)
                     # <word1>
@@ -116,6 +116,15 @@ _vxfldcommon()
             fi
             ;;
     esac
-    [[ ! -z ${completion_string} ]] && \
-    COMPREPLY=( $( compgen -W "${completion_string}" -- "${cur}" ) )
+    case ${completion_string} in
+        "")
+            ;;
+        filepath)
+            COMPREPLY=( $( compgen -f "${cur}" ) )
+            [[ -d ${COMPREPLY} ]] && compopt -o nospace
+            ;;
+        *)
+            COMPREPLY=( $( compgen -W "${completion_string}" -- "${cur}" ) )
+            ;;
+    esac
 }

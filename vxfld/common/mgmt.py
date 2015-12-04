@@ -38,24 +38,26 @@ class MgmtServer(object):
     __BUF_SIZE = 4 * 1024
 
     # pylint: disable=no-member
-    def __init__(self, uds_file, process_cb, concurrency=10):
+    def __init__(self, uds_file, process_cb, logger, concurrency=10):
         self.__uds_file = uds_file
         self.__socket = socket.socket(socket.AF_UNIX,
                                       socket.SOCK_STREAM)
         self.__concurrency = concurrency
+        self.__logger = logger
         self.__process = process_cb
 
     def __handle_msg(self, conn, _):
         """ Main run method.
         """
-        msg = pickle.loads(conn.recv(self.__BUF_SIZE))
-        out, err = self.__process(msg)
-        output = pickle.dumps((out, err), pickle.HIGHEST_PROTOCOL)
         try:
+            msg = pickle.loads(conn.recv(self.__BUF_SIZE))
+            out, err = self.__process(msg)
+            output = pickle.dumps((out, err), pickle.HIGHEST_PROTOCOL)
             conn.sendall(struct.pack('I', len(output)))
             conn.sendall(output)
-        except socket.error:
-            raise eventlet.StopServe
+        except Exception as ex:  # pylint: disable=broad-except
+            self.__logger.error('Failed to process request from mgmt. client: '
+                                '%s', ex)
 
     def run(self):
         """ Start the mgmt server
@@ -70,7 +72,7 @@ class MgmtServer(object):
         except Exception as ex:  # pylint: disable=broad-except
             raise RuntimeError('Unable to bind to mgmt socket %s: %s' %
                                (self.__uds_file, ex))
-        self.__socket.listen(5)
+        self.__socket.listen(self.__concurrency)
         eventlet.serve(self.__socket,
                        self.__handle_msg,
                        concurrency=self.__concurrency)

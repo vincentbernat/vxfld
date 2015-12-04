@@ -19,7 +19,7 @@ DESCRIPTION
 ===========
 
 vxsndctl is used to inspect and update the VXLAN service node daemon's
-configuration.
+configuration and runtime state.
 
 The service node daemon ``vxsnd(8)`` is a process that maintains a list of
 VTEPs associated with each VXLAN. It synchronizes state between registration
@@ -46,9 +46,10 @@ COMMANDS
 
 The vxsndctl utility provides the following commands:
 
-fdb
-  Displays the current set of VXLANS the registration daemons have reported to
-  the service node.
+fdb [<vni>]
+  Displays the current set of addresses that the registration daemons have
+  reported to the service node. Provide a VNI to print addresses for a
+  specific VNI.
 
 get config [<parameter>]
   Displays vxsnd's runtime configuration. Providing a parameter prints a

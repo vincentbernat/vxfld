@@ -18,11 +18,12 @@ SYNOPSIS
 DESCRIPTION
 ===========
 
-vxrdctl is used to inspect the VXLAN registration daemon's configuration.
+vxrdctl is used to inspect the VXLAN registration daemon's configuration and
+runtime state.
 
 The registration daemon ``vxrd(8)`` is a process that periodically
-registers VTEPs with the service node ``vxsnd(8)`` to keep the
-VTEP endpoint membership active at the service node.
+registers VTEPs with the service node ``vxsnd(8)`` to keep its VTEP membership
+active.
 
 
 OPTIONS
@@ -49,13 +50,17 @@ get config [<parameter>]
   Displays vxrd's runtime configuration. Providing a parameter prints a
   single configuration option.
 
-peers
+peers [<vni>]
   Shows the list of VTEP peers reported back by the service node. This command
   is only available in head end replication mode.
 
-vxlans
-  Shows the current set of VXLANS the registration daemon has reported to the
-  service node.
+show
+  Displays a snapshot of vxrd's runtime configuration.
+
+vxlans [<hrep>]
+  Shows the current set of VXLANs the registration daemon has reported to the
+  service node. Appending ``hrep`` to this command prints the HREP addresses
+  from the bridge table when head end replication is enabled.
 
 
 SEE ALSO

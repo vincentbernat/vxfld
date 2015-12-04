@@ -23,6 +23,7 @@
 from ConfigParser import RawConfigParser, NoSectionError
 import logging
 import socket
+import uuid
 
 from vxfld.common.enums import (
     ConfigSection,
@@ -53,9 +54,68 @@ class Field(object):
     def tostr(self, value):
         """ Returns a display friendly value.
 
-        Derived classes can override this function to provide custom
+        Derived classes can override this method to provide custom
         behavior.
         """
+        # pylint: disable=no-self-use
+        return value
+
+
+class AddressField(Field):
+    """ Address object.
+    """
+    def __call__(self, value):
+        """ Returns the result of gethostbyname on a string.
+
+        Verifies correctness of a dotted decimal specification.
+        """
+        if value is None:
+            return value
+        try:
+            return socket.gethostbyname(value.strip('\'\"'))
+        except Exception:  # pylint: disable=broad-except
+            raise RuntimeError('Invalid address %s' % value)
+
+
+class BooleanField(Field):
+    """ Boolean object.
+    """
+    def __call__(self, value):
+        """ Check if a value can be converted to a boolean.
+        """
+        if value is None:
+            return None
+        try:
+            return str(value).lower() in ('1', 'on', 'yes', 'true')
+        except Exception:  # pylint: disable=broad-except
+            raise RuntimeError('Invalid boolean value %s' % value)
+
+
+class IntegerField(Field):
+    """ Integer object.
+    """
+    def __call__(self, value):
+        """ Check if a value can be converted to an integer.
+        """
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except Exception:  # pylint: disable=broad-except
+            raise RuntimeError('Invalid integer value %s' % value)
+
+
+class LogLevelField(Field):
+    """ LogLevel object.
+    """
+    def __call__(self, value):
+        """ Get the the log level.
+        If successful, returns the numeric value corresponding to one of the
+        defined levels passed to the method.
+        """
+        lvl = logging.getLevelName(value.upper())
+        if isinstance(lvl, basestring):
+            raise RuntimeError('Invalid log level %s' % value)
         return value
 
 
@@ -85,64 +145,6 @@ class ServerField(Field):
         return ', '.join(ip_addr for ip_addr, port in value)
 
 
-class AddressField(Field):
-    """ Address object.
-    """
-    def __call__(self, value):
-        """ Returns the result of gethostbyname on a string.
-
-        Verifies correctness of a dotted decimal specification.
-        """
-        if value is None:
-            return value
-        try:
-            return socket.gethostbyname(value.strip('\'\"'))
-        except Exception:  # pylint: disable=broad-except
-            raise RuntimeError('Invalid address %s' % value)
-
-
-class IntegerField(Field):
-    """ Integer object.
-    """
-    def __call__(self, value):
-        """ Check if a value can be converted to an integer.
-        """
-        if value is None:
-            return None
-        try:
-            return int(value)
-        except Exception:  # pylint: disable=broad-except
-            raise RuntimeError('Invalid integer value %s' % value)
-
-
-class BooleanField(Field):
-    """ Boolean object.
-    """
-    def __call__(self, value):
-        """ Check if a value can be converted to a boolean.
-        """
-        if value is None:
-            return None
-        try:
-            return str(value).lower() in ('1', 'on', 'yes', 'true')
-        except Exception:  # pylint: disable=broad-except
-            raise RuntimeError('Invalid boolean value %s' % value)
-
-
-class LogLevelField(Field):
-    """ LogLevel object.
-    """
-    def __call__(self, value):
-        """ Get the the log level.
-        If successful, returns the numeric value corresponding to one of the
-        defined levels passed to the method.
-        """
-        lvl = logging.getLevelName(value.upper())
-        if isinstance(lvl, basestring):
-            raise RuntimeError('Invalid log level %s' % value)
-        return value
-
-
 class _ConfigMeta(type):
     """ Meta class that sets the section and name on an instance of
     ConfigField.
@@ -166,23 +168,24 @@ class Config(object):
         __metaclass__ = _ConfigMeta
 
         section = ConfigSection.COMMON
-        loglevel = LogLevelField(default=logging.getLevelName(logging.INFO),
-                                 reloadable=True)
+        concurrency = IntegerField(default=1000)
         debug = BooleanField(default=False, reloadable=True)
+        eventlet_backdoor_port = IntegerField(default=9000)
+        holdtime = IntegerField(default=90, reloadable=True)
+        # no of log files to store on the disk
+        logbackupcount = IntegerField(default=14)
         logdest = Field(default='syslog')
         # log file size in bytes
         logfilesize = IntegerField(default=500 * 1024)
-        # no of log files to store on the disk
-        logbackupcount = IntegerField(default=14)
+        loglevel = LogLevelField(default=logging.getLevelName(logging.INFO),
+                                 reloadable=True)
+        max_packet_size = IntegerField(default=1500)
+        node_id = IntegerField(default=uuid.getnode())
         pidfile = Field(default=None, nullable=True)
+        src_ip = AddressField(default='0.0.0.0')
+        svcnode_ip = AddressField(default='0.0.0.0')
         udsfile = Field(default=None, nullable=True)
         vxfld_port = IntegerField(default=10001)
-        holdtime = IntegerField(default=90, reloadable=True)
-        svcnode_ip = AddressField(default='0.0.0.0')
-        eventlet_backdoor_port = IntegerField(default=9000)
-        max_packet_size = IntegerField(default=1500)
-        src_ip = AddressField(default='0.0.0.0')
-        concurrency = IntegerField(default=1000)
 
     class VxrdConfig(object):
         """ Vxrd specific configuration parameters.
@@ -191,9 +194,9 @@ class Config(object):
         __metaclass__ = _ConfigMeta
 
         section = ConfigSection.VXRD
-        refresh_rate = IntegerField(default=3, reloadable=True)
-        config_check_rate = IntegerField(default=5, reloadable=True)
+        config_check_rate = IntegerField(default=60, reloadable=True)
         head_rep = BooleanField(default=True, reloadable=True)
+        refresh_rate = IntegerField(default=3, reloadable=True)
 
     class VxsndConfig(object):
         """ Vxsnd specific configuration parameters.
@@ -201,25 +204,25 @@ class Config(object):
         # pylint: disable=too-few-public-methods
         __metaclass__ = _ConfigMeta
 
+        area = IntegerField(default=None, nullable=True)
+        age_check = IntegerField(default=90, reloadable=True)
+        enable_flooding = BooleanField(default=True, reloadable=True)
+        enable_vxlan_listen = BooleanField(default=True)
+        install_svcnode_ip = BooleanField(default=False)
+        proxy_id = AddressField(default=None, reloadable=True, nullable=True)
+        proxy_local_only = BooleanField(default=True, reloadable=True)
+        receive_queue = IntegerField(default=131072)
+        refresh_proxy_servers = BooleanField(default=False, reloadable=True)
         section = ConfigSection.VXSND
         svcnode_peers = ServerField(default=None, reloadable=True,
                                     nullable=True)
-        install_svcnode_ip = BooleanField(default=False)
-        enable_vxlan_listen = BooleanField(default=True)
+        sync_from_proxy = BooleanField(default=False)
+        sync_targets = IntegerField(default=1)
         vxlan_port = IntegerField(default=4789)
-        age_check = IntegerField(default=90, reloadable=True)
-        receive_queue = IntegerField(default=131072)
         vxlan_dest_port = IntegerField(default=None, nullable=True)
         vxlan_listen_port = IntegerField(default=None, nullable=True)
-        proxy_id = AddressField(default=None, reloadable=True, nullable=True)
         vxfld_proxy_servers = ServerField(default=None, reloadable=True,
                                           nullable=True)
-        enable_flooding = BooleanField(default=True, reloadable=True)
-        proxy_local_only = BooleanField(default=True, reloadable=True)
-        refresh_proxy_servers = BooleanField(default=False, reloadable=True)
-        sync_targets = IntegerField(default=1)
-        sync_from_proxy = BooleanField(default=False)
-        area = IntegerField(default=None, nullable=True)
 
     def __init__(self, node_type, config_file):
         self.__params = self.__get_fields(self.CommonConfig)
@@ -257,18 +260,6 @@ class Config(object):
             if isinstance(field, Field)
         }
 
-    def is_reloadable(self, name):
-        """ Return True if a parameter is reloadable, False otherwise.
-        """
-        field = next(field for field in self.__params if field.name == name)
-        return field.reloadable
-
-    def is_nullable(self, name):
-        """ Return True if a parameter is nullable, False otherwise.
-        """
-        field = next(field for field in self.__params if field.name == name)
-        return field.nullable
-
     def get_params(self):
         """ Returns a dict of (param_name, param_value) for all sections in
         the configuration.
@@ -277,6 +268,18 @@ class Config(object):
             field.name: field.tostr(getattr(self, field.name))
             for field in self.__params
         }
+
+    def is_nullable(self, name):
+        """ Return True if a parameter is nullable, False otherwise.
+        """
+        field = next(field for field in self.__params if field.name == name)
+        return field.nullable
+
+    def is_reloadable(self, name):
+        """ Return True if a parameter is reloadable, False otherwise.
+        """
+        field = next(field for field in self.__params if field.name == name)
+        return field.reloadable
 
     def set_param(self, name, val):
         """ Sets an attribute to the provided value.

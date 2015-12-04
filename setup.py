@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='vxfld',
-    version='2.0',
+    version='2.1',
     description='VXLAN Flooding Service',
     author='Cumulus Networks/Metacloud Engineering',
     author_email='info@cumulusnetworks.com',
@@ -21,10 +21,11 @@ setup(
     include_package_data=True,
     zip_safe=False,
     install_requires=[
-        'python-daemon==1.5.5',
-        'dpkt==1.8.6.2',
         'docopt==0.6.1',
-        'eventlet>=0.17'
+        'dpkt==1.8.6.2',
+        'eventlet>=0.17',
+        'protobuf==2.4.1',
+        'python-daemon==1.5.5'
     ],
     license='GPLv2'
 )

@@ -9,7 +9,18 @@ _vxsnd_commands() {
 }
 
 _vxsnd_fdb() {
-    echo "add del"
+    local command=$1
+    if [ -z ${command} ]; then
+       echo "add del file"
+    else
+       case ${command} in
+           # file
+           file)
+               # autocomplete file path
+               echo "filepath"
+               ;;
+       esac
+    fi
 }
 
 _vxsnd_get() {
@@ -83,6 +94,10 @@ _vxsnd_word2_func() {
         set)
             # set config/debug
             echo $( _vxsnd_set ${word2} )
+            ;;
+        fdb)
+            # fdb file
+            echo $( _vxsnd_fdb ${word2} )
             ;;
     esac
 }

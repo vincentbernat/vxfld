@@ -72,20 +72,13 @@ class _CompressedRotatingFileHandler(logging.handlers.RotatingFileHandler):
             self.stream = self._open()
 
 
-def common_parser(node_name, node_type):
+def common_parser(node_type):
     """ Argparser for common command-line arguments.
-    :param node_name: unique name to identify the node
     :param node_type (NodeType): can be vxrd or vxsnd
     :return: an argument parser object for parsing command line strings into
     Python objects
     """
     prsr = argparse.ArgumentParser()
-    prsr.add_argument('-n', '--node-name',
-                      default=node_name,
-                      help=argparse.SUPPRESS)
-    prsr.add_argument('-t', '--node-type',
-                      default=node_type,
-                      help=argparse.SUPPRESS)
     if node_type == NodeType.VXRD:
         default_conf_file = DefaultConfFile.VXRD
     else:
@@ -106,29 +99,29 @@ def common_parser(node_name, node_type):
     return prsr
 
 
-def load_configuration(args):
-    """ Load configuration.
-    :param args: parsed command-line arguments
-    :return: a configuration (Config) object
+def get_config_params(node_type, reloadable=False):
+    """ Outputs a space separated list of configuration params supported by
+    the daemon.
+    :param node_type (NodeType): can be vxrd or vxsnd
+    :param reloadable: if True, then only reloadable parameters are displayed
+    :return: None
     """
-    conf = config.Config(args.node_type, args.config_file)
-    for param, val in vars(args).iteritems():
-        if val is not None:
-            setattr(conf, param, val)
-    return conf
+    conf = config.Config(node_type, '')
+    print ' '.join({param for param in conf.get_params()
+                    if not reloadable or conf.is_reloadable(param)})
 
 
-def get_logger(node_name, logdest, filehandler_args=None):
+def get_logger(node_type, logdest, filehandler_args=None):
     """ Return a logger for the specified node name, creating it if necessary.
-    :param node_name: unique name to identify the node
+    :param node_type (NodeType): vxfld node type
     :param logdest (LogDestination): log file destination
     :param filehandler_args: dict that provides the 'filename' (mandatory),
     'maxBytes' and 'backupCount' required by the rotating file handler
     :return: logger object.
     """
-    logger = logging.getLogger(node_name)
-    lgr_fmt = '%%(asctime)s %s %%(levelname)s: %%(message)s' % node_name
-    syslog_fmt = '%s: %%(levelname)s: %%(message)s' % node_name
+    logger = logging.getLogger(node_type)
+    lgr_fmt = '%%(asctime)s %s %%(levelname)s: %%(message)s' % node_type
+    syslog_fmt = '%s: %%(levelname)s: %%(message)s' % node_type
     date_fmt = '%H:%M:%S'
     if logdest == LogDestination.SYSLOG:
         log_handler = logging.handlers.SysLogHandler(address='/dev/log')
@@ -152,16 +145,17 @@ def get_logger(node_name, logdest, filehandler_args=None):
     return logger
 
 
-def get_config_params(node_type, reloadable=False):
-    """ Outputs a space separated list of configuration params supported by
-    the daemon.
-    :param node_type (NodeType): can be vxrd or vxsnd
-    :param reloadable: if True, then only reloadable parameters are displayed
-    :return: None
+def load_configuration(node_type, args):
+    """ Load configuration.
+    :param node_type (NodeType): vxfld node type
+    :param args: parsed command-line arguments
+    :return: a configuration (Config) object
     """
-    conf = config.Config(node_type, '')
-    print ' '.join({param for param in conf.get_params()
-                    if not reloadable or conf.is_reloadable(param)})
+    conf = config.Config(node_type, args.config_file)
+    for param, val in vars(args).iteritems():
+        if val is not None:
+            setattr(conf, param, val)
+    return conf
 
 
 class Pidfile(object):
@@ -199,31 +193,6 @@ class Pidfile(object):
     def __str__(self):
         return self.__pidfile
 
-    def lock(self):
-        try:
-            fcntl.flock(self.__pidfd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except IOError:
-            raise RuntimeError('Another instance of this program is already '
-                               'running.')
-
-    def unlock(self):
-        try:
-            fcntl.flock(self.__pidfd, fcntl.LOCK_UN)
-        except IOError:
-            raise RuntimeError('Unable to unlock pid file.')
-
-    def write(self, pid):
-        self.__pidfd.truncate(0)
-        self.__pidfd.write('%d\n' % pid)
-        self.__pidfd.flush()
-
-    def read(self):
-        try:
-            self.__pidfd.seek(0)
-            return int(self.__pidfd.readline().strip())
-        except Exception:  # pylint: disable=broad-except
-            return
-
     def is_running(self):
         pid = self.read()
         if pid is None:
@@ -236,6 +205,31 @@ class Pidfile(object):
                                                     self.__uuid in exec_out)
         except IOError:
             return False
+
+    def lock(self):
+        try:
+            fcntl.flock(self.__pidfd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except IOError:
+            raise RuntimeError('Another instance of this program is already '
+                               'running.')
+
+    def read(self):
+        try:
+            self.__pidfd.seek(0)
+            return int(self.__pidfd.readline().strip())
+        except Exception:  # pylint: disable=broad-except
+            return
+
+    def unlock(self):
+        try:
+            fcntl.flock(self.__pidfd, fcntl.LOCK_UN)
+        except IOError:
+            raise RuntimeError('Unable to unlock pid file.')
+
+    def write(self, pid):
+        self.__pidfd.truncate(0)
+        self.__pidfd.write('%d\n' % pid)
+        self.__pidfd.flush()
 
 
 class SetEncoder(json.JSONEncoder):
@@ -253,7 +247,8 @@ class SetEncoder(json.JSONEncoder):
             return list(obj)
         elif hasattr(obj, '__dict__'):
             return {
-                attr: self.default(value)
+                attr: (value if not isinstance(value, set)
+                       else self.default(value))
                 for attr, value in vars(obj).iteritems()
             }
         return super(SetEncoder, self).default(obj)

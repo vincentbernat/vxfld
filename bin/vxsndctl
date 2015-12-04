@@ -20,19 +20,20 @@
 """ Control program for managing vxsnd.
 """
 import json
+import operator
 import sys
 
-from docopt import docopt, DocoptExit
-
-from vxfld.common import mgmt
+from docopt import DocoptExit
 
 
 def main():
     """
     Usage:
         vxsndctl -h
-        vxsndctl [-u UDS_FILE] [-j] fdb
-        vxsndctl [-u UDS_FILE] [-j] fdb (add <vni> <ip> | del <vni> <ip>)
+        vxsndctl [-u UDS_FILE] [-j] fdb [debug]
+        vxsndctl [-u UDS_FILE] [-j] fdb [<vni>] [debug]
+        vxsndctl [-u UDS_FILE] [-j] fdb (add <vni> <ip> | del <vni> <ip> |
+                                         file <filename>)
         vxsndctl [-u UDS_FILE] [-j] get config [<parameter>]
         vxsndctl [-u UDS_FILE] [-j] set config <parameter> [<value>]
         vxsndctl [-u UDS_FILE] [-j] set debug (on | off)
@@ -46,6 +47,7 @@ def main():
 
     Commands:
         fdb: print the vxsnd forwarding DB
+        fdb <vni>: print the vxsnd forwarding DB for a vni
         get config: print the vxsnd configuration
         get config <parameter>: print single vxsnd config option
         set config <parameter> [<value>]: set a single vxsnd config option
@@ -54,23 +56,35 @@ def main():
         show: print a snapshot of the runtime configuration
         show detail: print a detailed snapshot of the runtime configuration
     """
+    from docopt import docopt
+    from vxfld.common import mgmt
+
     args = docopt(main.__doc__, argv=sys.argv[1:] or ['-h'])
     mgmt_client = mgmt.MgmtClient(args['-u'])
     resp, err = mgmt_client.sendobj(args)
     if err:
         raise Exception('Error return: "%s"' % err)
-
+    if resp is None:
+        return 0
     if args['-j'] and not args['config']:
         print json.dumps(resp)
     elif args['fdb']:
         # This was a fdb request
-        fmt = '{:<8}    {:<8}    {:<8}'
-        print fmt.format('VNI', 'Address', 'Ageout')
-        print fmt.format('===', '=======', '======')
-        for vni in sorted(resp.keys()):
-            vni_out = vni
-            for ip_addr in sorted(resp[vni].keys()):
-                print fmt.format(vni_out, ip_addr, resp[vni][ip_addr])
+        if args['debug']:
+            fmt = '{:<8}    {:<12}    {:<6}    {:<12}'
+            print fmt.format('VNI', 'Address', 'Ageout', 'NodeId')
+            print fmt.format('===', '=======', '======', '======')
+            for vni in sorted(resp.keys()):
+                for ip_addr, holdtime, identifier in \
+                        sorted(resp[vni], key=operator.itemgetter(0)):
+                    print fmt.format(vni, ip_addr, holdtime, identifier)
+        else:
+            fmt = '{:<8}    {:<12}    {:<6}'
+            print fmt.format('VNI', 'Address', 'Ageout')
+            print fmt.format('===', '=======', '======')
+            for vni in sorted(resp.keys()):
+                for ip_addr, holdtime, _ in set(resp[vni]):
+                    print fmt.format(vni, ip_addr, holdtime)
     elif args['get'] and args['config']:
         print json.dumps(resp, sort_keys=True, indent=4,
                          separators=(',', ': '))
@@ -78,6 +92,7 @@ def main():
         print json.dumps(resp, sort_keys=True, indent=4,
                          separators=(',', ': '))
     elif args['show']:
+        print 'Protocol version: %s' % resp['version']
         fmt = '{:<15}    {:<15}    {:<40}'
         addr_per_line = 2
         print fmt.format('Local address', 'Anycast address', 'Peer Addresses')
@@ -109,7 +124,7 @@ if __name__ == '__main__':
         sys.exit(main())
     except DocoptExit as ex:
         print ex
-    except SystemExit:
+    except (KeyboardInterrupt, SystemExit):
         pass
     except Exception as ex:  # pylint: disable=broad-except
         sys.stderr.write('%s\n' % ex)

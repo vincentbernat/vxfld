@@ -22,34 +22,12 @@
 # pylint: disable=too-few-public-methods
 
 
-class NodeType(object):
-    """ VXFLD node type.
-    """
-    VXRD = 'vxrd'
-    VXSND = 'vxsnd'
-    VALUES = [VXRD, VXSND]
-
-    def __init__(self):
-        raise NotImplementedError
-
-
 class ConfigSection(object):
     """ Section name in configuration file.
     """
     COMMON = 'common'
     VXRD = 'vxrd'
     VXSND = 'vxsnd'
-
-    def __init__(self):
-        raise NotImplementedError
-
-
-class LogDestination(object):
-    """  Destination for log messages.
-    """
-    SYSLOG = 'syslog'
-    STDOUT = 'stdout'
-    LOGFILE = 'logfile'
 
     def __init__(self):
         raise NotImplementedError
@@ -80,6 +58,55 @@ class DefaultUdsFile(object):
     """
     VXRD = '/var/run/vxrd.sock'
     VXSND = '/var/run/vxsnd.sock'
+
+    def __init__(self):
+        raise NotImplementedError
+
+
+class LogDestination(object):
+    """  Destination for log messages.
+    """
+    SYSLOG = 'syslog'
+    STDOUT = 'stdout'
+    LOGFILE = 'logfile'
+
+    def __init__(self):
+        raise NotImplementedError
+
+
+class NodeType(object):
+    """ VXFLD node type.
+    """
+    VXRD = 'vxrd'
+    VXSND = 'vxsnd'
+    VALUES = [VXRD, VXSND]
+
+    def __init__(self):
+        raise NotImplementedError
+
+
+class OperState(object):
+    """ Oper state (netdevice->operstate).
+    Defined in /usr/include/linux/if.h
+    """
+    # pylint: disable=too-few-public-methods
+    IF_OPER_UNKNOWN = 0
+    IF_OPER_NOTPRESENT = 1
+    IF_OPER_DOWN = 2
+    IF_OPER_LOWERLAYERDOWN = 3
+    IF_OPER_TESTING = 4
+    IF_OPER_DORMANT = 5
+    IF_OPER_UP = 6
+
+    OPERSTATE_STR = {
+        IF_OPER_UNKNOWN: 'UNKNOWN',
+        IF_OPER_NOTPRESENT: 'NOTPRESENT',
+        IF_OPER_DOWN: 'DOWN',
+        IF_OPER_LOWERLAYERDOWN: 'LOWERLAYERDOWN',
+        IF_OPER_TESTING: 'TESTING',
+        IF_OPER_DORMANT: 'DORMANT',
+        IF_OPER_UP: 'UP'
+    }
 
     def __init__(self):
         raise NotImplementedError

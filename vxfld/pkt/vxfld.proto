@@ -1,0 +1,66 @@
+// Copyright 2015 Cumulus Networks, Inc. All rights reserved.
+//
+// This program is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License
+// as published by the Free Software Foundation; either version 2
+// of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc.
+// 51 Franklin Street, Fifth Floor
+// Boston, MA  02110-1301, USA.
+// VXFLD message definitions.
+
+// IP address message
+message IPv4Address {
+    repeated uint32 address = 1 [packed = true];
+}
+
+// Proxy Message
+message Proxy {
+    optional uint32 ttl = 1 [default = 4];
+    optional uint32 proxy_hops = 2 [default = 0];
+    optional uint32 srcport = 3 [default = 0];
+    optional IPv4Address srcip_n = 4;
+    optional uint32 area = 5 [default = 0];
+    repeated IPv4Address proxy_ips = 6;
+    optional bytes vxlan_pkt = 7;
+}
+
+// Refresh Message
+message Refresh {
+    message VniDict {
+        message VniData {
+            required IPv4Address ip_addr = 1;
+        }
+        required uint32 vni = 1;
+        repeated VniData data = 2;
+    }
+    optional bool originator = 1 [default = false];
+    optional uint32 holdtime = 2 [default = 90];
+    optional uint32 response_type = 3 [default = 0];
+    optional uint64 identifier = 4 [default = 0];
+    repeated VniDict vteps = 5;
+}
+
+// Sync Message
+message Sync {
+    message VniDict {
+        message VniData {
+            required IPv4Address ip_addr = 1;
+            optional uint32 holdtime = 2 [default = 90];
+            optional uint64 identifier = 3 [default = 0];
+        }
+        required uint32 vni = 1;
+        repeated VniData data = 2;
+    }
+    optional uint64 identifier = 1 [default = 0];
+    repeated VniDict vteps = 2;
+}
+
