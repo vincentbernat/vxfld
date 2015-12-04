@@ -1,3 +1,12 @@
+python-vxfld (2.0-1) unstable; urgency=low
+
+  * vxsnd: ensure that the UDP checksum is always recalcuted; Thanks markmcclain
+  * vxrd: remove dstport check from device config validation; Thanks jordant
+  * add license file to manifest.in for setup.py to work; Thanks drwahl
+  * remove config files from setup; Thanks jordant
+
+ -- Sameer Ladiwala <sameer@cumulusnetworks.com>  Fri, 04 Dec 2015 11:32:35 -0800
+
 python-vxfld (2.0) unstable; urgency=low
 
   * New maintainer
