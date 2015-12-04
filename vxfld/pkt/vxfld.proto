@@ -62,5 +62,6 @@ message Sync {
     }
     optional uint64 identifier = 1 [default = 0];
     repeated VniDict vteps = 2;
+    optional uint32 response_type = 3 [default = 0];
 }
 

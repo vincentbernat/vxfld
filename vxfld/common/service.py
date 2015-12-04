@@ -98,18 +98,17 @@ class Vxfld(object):
         raise NotImplementedError
 
     def _serve(self, sock, handle, pool=None, bufsize=None, err_cbs=None):
-        """ Runs a server on the supplied socket.  Calls the function *handle*
-        in a separate greenthread for every incoming client connection.
-        *handle* takes two arguments: the client socket object, and the client
-        address.
+        """ Runs a udp listener on the supplied socket.  Calls the function
+        *handle* in a separate greenthread for every incoming datagram.
+        *handle* takes two arguments: packet buffer and client address.
         """
         # pylint: disable=too-many-arguments
         err_cbs = err_cbs or {}
+        bufsize = bufsize or self._conf.max_packet_size
+        pool = pool or self._pool
         while True:
             try:
-                bufsize = bufsize or self._conf.max_packet_size
                 buf, addr = sock.recvfrom(bufsize)
-                pool = pool or self._pool
                 green_thread = pool.spawn(handle, buf, addr)
                 green_thread.link(self._stop_checker)
             except socket.error as (err, _):
@@ -118,6 +117,21 @@ class Vxfld(object):
                     return
                 else:
                     raise
+            except eventlet.StopServe:
+                return
+
+    def _serve_tcp(self, sock, handle, pool=None):
+        """ Runs a tcp server on the supplied socket. Calls the function
+        *handle* in a separate greenthread for every incoming client
+        connection. *handle* takes two arguments: the client socket object,
+        and the client address.
+        """
+        pool = pool or self._pool
+        while True:
+            try:
+                client_sock, addr = sock.accept()
+                green_thread = pool.spawn(handle, client_sock, addr)
+                green_thread.link(self._stop_checker)
             except eventlet.StopServe:
                 return
 

@@ -267,6 +267,7 @@ class _Vxsnd(service.Vxfld):
                             with open(msg['<filename>']) as fdesc:
                                 for line in fdesc:
                                     vni, ip_addr = line.split()
+                                    socket.inet_aton(ip_addr)
                                     vni_dict[int(vni)].add(ip_addr)
                         except Exception:  # pylint: disable=broad-except
                             ret = (None, 'Failed to parse file %s' %
@@ -277,6 +278,7 @@ class _Vxsnd(service.Vxfld):
                     else:
                         vni = int(msg['<vni>'])
                         ip_addr = msg['<ip>']
+                        socket.inet_aton(ip_addr)
                         holdtime = _Fdb.NO_AGE if msg['add'] else 0
                         self._logger.info('MgmtServer: fdb %s %s %s',
                                           'add' if msg['add'] else 'del',
@@ -432,6 +434,13 @@ class _Vxsnd(service.Vxfld):
                 self._pool.spawn_n(self._serve, sock, self.__handle_vxfld_msg)
             if isock is not None:
                 self.__isocketpool.create = lambda: isock
+            if self._conf.src_ip:
+                tsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                tsock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                tsock.bind((self._conf.src_ip, self._conf.vxfld_port))
+                tsock.listen(max(len(self._conf.svcnode_peers), 5))
+                self._pool.spawn_n(self._serve_tcp, tsock,
+                                   self.__handle_vxfld_sync)
         except socket.error as ex:
             raise RuntimeError('opening receive and transmit sockets : %s' %
                                ex)
@@ -540,8 +549,6 @@ class _Vxsnd(service.Vxfld):
             self.__handle_vxfld_refresh(pkt, addr)
         elif pkt.type == VXFLD.MsgType.PROXY:
             self.__handle_vxfld_proxy(pkt, addr)
-        elif pkt.type == VXFLD.MsgType.SYNC:
-            self.__handle_vxfld_sync(pkt, addr)
         else:
             self._logger.error('Unknown VXFLD packet type %s received from %s',
                                pkt.type, srcip)
@@ -604,7 +611,7 @@ class _Vxsnd(service.Vxfld):
         # 0 is the default value of the field in the packet
         identifier = getattr(pkt.data, 'identifier', 0) or None
         self.__update_fdb(pkt.data.vni_vteps, pkt.data.holdtime, identifier,
-                          refresh=False)
+                          sync=False)
         if pkt.data.originator:
             if (self._conf.refresh_proxy_servers and
                     self._conf.vxfld_proxy_servers):
@@ -634,33 +641,49 @@ class _Vxsnd(service.Vxfld):
                 addr_set = self.__fdb.get_addrs(vni)
                 if addr_set:
                     vni_dict[vni] = addr_set
-            self.__send_vxfld_pkt(addr, vni_dict,
-                                  {'holdtime': self._conf.holdtime,
-                                   'identifier': _Fdb.DEFAULT_ID,
-                                   'msgtype': VXFLD.MsgType.REFRESH,
-                                   'version': pkt.version})
+            self.__send_refresh_pkt(addr, vni_dict,
+                                    {'holdtime': self._conf.holdtime,
+                                     'identifier': _Fdb.DEFAULT_ID,
+                                     'version': pkt.version})
 
-    def __handle_vxfld_sync(self, pkt, addr):
+    def __handle_vxfld_sync(self, sock, addr):
         """ Handle vxsnd to vxsnd sync messages.
-        :param pkt: VXFLD pkt
+        :param sock: client socket
         :param addr: tuple composed of the sender's IP addr and source port
+        :returns: True if successful, False otherwise
         """
+        # pylint: disable=no-member
         srcip, _ = addr
-        if pkt.data.identifier != self._conf.node_id:
-            self._logger.info('Sync request from %s', srcip)
-            now = int(time.time())
-            vteps = {vni: self.__fdb.get(vni, now) for vni in self.__fdb}
-            self.__send_vxfld_pkt(addr, vteps,
-                                  {'identifier': pkt.data.identifier,
-                                   'msgtype': VXFLD.MsgType.SYNC,
-                                   'version': pkt.version})
-        else:
-            self._logger.info('Sync response from %s', srcip)
-            self.__sync_response = True
-            for vni, iplist in pkt.data.vni_vteps.iteritems():
-                for ele in iplist:
-                    ip_addr, holdtime, identifier = ele
-                    self.__fdb.update(vni, ip_addr, holdtime, identifier)
+        try:
+            self._logger.info('Sync packet from %s', srcip)
+            pkt = VXFLD.Packet(
+                b''.join(iter(lambda: sock.recv(self._conf.max_packet_size),
+                         b''))
+            )
+            if pkt.data.vni_vteps:
+                self._logger.info('Sync data from %s', srcip)
+                for vni, iplist in pkt.data.vni_vteps.iteritems():
+                    for ele in iplist:
+                        ip_addr, holdtime, identifier = ele
+                        self.__fdb.update(vni, ip_addr, holdtime, identifier)
+            if pkt.data.response_type == VXFLD.ResponseType.ALL:
+                self._logger.info('Sync request from %s', srcip)
+                vteps = collections.defaultdict(list)
+                now = int(time.time())
+                for vni in self.__fdb:
+                    for entry in self.__fdb.get(vni, now):
+                        addr, holdtime, identifier = entry
+                        if holdtime > 0:
+                            vteps[vni].append((addr, holdtime, identifier))
+                pkt.data.vni_vteps = vteps
+                pkt_args = {'response_type': VXFLD.ResponseType.NONE}
+                self.__send_sync_pkt(addr, pkt_args, sock=sock, vteps=vteps)
+            return True
+        except Exception as ex:  # pylint: disable=broad-except
+            self._logger.error('Failed to receive data from %s. %s', srcip, ex)
+            if sock is not None:
+                sock.close()
+        return False
 
     def __handle_vxlan_packet(self, pkt, addr, proxy=True, learn=True):
         """ The entry point from the sock receive.
@@ -709,13 +732,16 @@ class _Vxsnd(service.Vxfld):
             # Add this <vni, srcip> to the fdb and tell peers about it
             self._logger.info('Learning ip %s, vni %d from VXLAN pkt', srcip,
                               vxlan_pkt.vni)
-            self.__update_fdb({vxlan_pkt.vni: {srcip}}, self._conf.holdtime)
+            try:
+                self.__update_fdb({vxlan_pkt.vni: {srcip}},
+                                  self._conf.holdtime)
+            except Exception as ex:  # pylint: disable=broad-except
+                self._logger.debug('Failed to update fdb. %s', ex)
 
     def __resync_fdb(self):
         """ Resyncs FDB from proxy and/or refresh servers
         """
-        self.__sync_response = False
-        while not self.__sync_response:
+        while True:
             targets = set()
             # First see if we need to sync from proxies
             if (self._conf.sync_from_proxy and
@@ -738,11 +764,90 @@ class _Vxsnd(service.Vxfld):
             if not targets:
                 break
             self._logger.info('Requesting fdb sync from %s', targets)
-            pkt = VXFLD.Packet(type=VXFLD.MsgType.SYNC,
-                               version=VXFLD.VERSION,
-                               inner={'identifier': self._conf.node_id})
-            self.__send_to_peers(pkt, targets)
-            eventlet.sleep(10)
+            pkt_args = {'response_type': VXFLD.ResponseType.ALL}
+            try:
+                for addr in targets:
+                    sock = self.__send_sync_pkt(addr, pkt_args)
+                    assert self.__handle_vxfld_sync(sock, addr)
+                    sock.close()
+            except Exception:  # pylint: disable=broad-except
+                eventlet.sleep(10)
+            else:
+                break
+
+    def __send_refresh_pkt(self, addr, vteps, pkt_args):
+        """ Sends a VXLAN refresh pkt to the source addr.
+        :param addr: tuple composed of the sender's IP addr and source port
+        :param vteps: dictionary mapping vni to a list of ip addresses
+        :param pkt_args: dictionary composed of inner packet attributes
+        """
+        # pylint: disable=missing-docstring
+        def send_pkt(pkt_in, addr_in):
+            with self.__isocketpool.item() as isock:
+                try:
+                    isock.sendto(str(pkt_in), addr_in)
+                except Exception as ex:  # pylint: disable=broad-except
+                    # Socket not ready, buffer overflow etc
+                    self._logger.error('Failed to send vxfld pkt reply: %s',
+                                       ex)
+        packet_count = 0
+        holdtime = pkt_args.get('holdtime', self._conf.holdtime)
+        identifier = pkt_args.get('identifier', _Fdb.DEFAULT_ID)
+        version = pkt_args.get('version', VXFLD.VERSION)
+        vxfld_pkt = None
+        for vni, msgdata in vteps.iteritems():
+            # Limit the refresh message to max_packet_size
+            if (vxfld_pkt is None or
+                    VXFLD.BASE_PKT_SIZE + len(vxfld_pkt) +
+                    vxfld_pkt.data.ipstr_len(vni, msgdata) >=
+                    self._conf.max_packet_size):
+                if vxfld_pkt is not None:
+                    send_pkt(vxfld_pkt, addr)
+                    packet_count += 1
+                    if packet_count % self.__VXFLD_PKT_BURST_SIZE == 0:
+                        eventlet.sleep(1)
+                # Set originator to 0 so that peers don't forward on
+                vxfld_pkt = (
+                    VXFLD.Packet(type=VXFLD.MsgType.REFRESH,
+                                 version=version,
+                                 inner={'holdtime': holdtime,
+                                        'originator': False,
+                                        'response_type':
+                                            VXFLD.ResponseType.NONE,
+                                        'identifier': identifier})
+                )
+            vxfld_pkt.data.vni_vteps = {vni: msgdata}
+        if vxfld_pkt is not None and vxfld_pkt.data.vni_vteps:
+            send_pkt(vxfld_pkt, addr)
+
+    def __send_sync_pkt(self, addr, pkt_args, sock=None, vteps=None):
+        """ Generate and send a VXFLD Sync packet.
+        :param addr: tuple composed of the recepients's IP addr and dest. port
+        :param pkt_args: dictionary composed of the inner packet's attributes
+        :param sock: socket object
+        :param vteps: dictionary mapping a vni to a tuple composed of the
+                      ip address, holdtime and node identifier.
+        :returns: a socket object
+        :raises: socket.error
+        """
+        response_type = pkt_args.get('response_type', VXFLD.ResponseType.NONE)
+        vxfld_pkt = VXFLD.Packet(type=VXFLD.MsgType.SYNC,
+                                 inner={'response_type': response_type})
+        if vteps is not None:
+            vxfld_pkt.data.vni_vteps = vteps
+        try:
+            if sock is None:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.connect(addr)
+            sock.sendall(str(vxfld_pkt))
+            sock.shutdown(socket.SHUT_WR)
+            return sock
+        except socket.error as ex:
+            # Socket not ready, buffer overflow etc
+            if sock is not None:
+                sock.close()
+            self._logger.error('Failed to send sync pkt: %s', ex)
+            raise
 
     def __send_to_peers(self, pkt, servers):
         """ Sends a pkt to one or more servers.
@@ -760,67 +865,6 @@ class _Vxsnd(service.Vxfld):
                 except Exception:  # pylint: disable=broad-except
                     self._logger.exception('Error sending update to peer snd '
                                            '%s:%d', ip_addr, port)
-
-    def __send_vxfld_pkt(self, addr, vteps, pkt_args):
-        """ Sends a VXLAN sync/refresh response pkt to the source addr.
-        :param addr: tuple composed of the sender's IP addr and source port
-        :param vteps: a dictionary mapping vnis to addresses for refresh
-                      packets or tuples composed of the address, adjusted
-                      holdtime and node identifier for sync packets
-        :param pkt_args: dictionary composed of packet attributes
-        """
-        # pylint: disable=missing-docstring
-        def send_pkt(pkt_in, addr_in):
-            with self.__isocketpool.item() as isock:
-                try:
-                    isock.sendto(str(pkt_in), addr_in)
-                except Exception as ex:  # pylint: disable=broad-except
-                    # Socket not ready, buffer overflow etc
-                    self._logger.error('Failed to send vxfld pkt reply: %s',
-                                       ex)
-        packet_count = 0
-        msgtype = pkt_args.get('msgtype', VXFLD.MsgType.UNKNOWN)
-        holdtime = pkt_args.get('holdtime', self._conf.holdtime)
-        identifier = pkt_args.get('identifier', _Fdb.DEFAULT_ID)
-        version = pkt_args.get('version', VXFLD.VERSION)
-        if msgtype not in [VXFLD.MsgType.REFRESH, VXFLD.MsgType.SYNC]:
-            raise RuntimeError('Unknown msgtype %s' % msgtype)
-        vxfld_pkt = None
-        for vni, msgdata in vteps.iteritems():
-            # Limit the refresh message to max_packet_size
-            if (vxfld_pkt is None or
-                    VXFLD.BASE_PKT_SIZE + len(vxfld_pkt) +
-                    vxfld_pkt.data.ipstr_len(vni, msgdata) >=
-                    self._conf.max_packet_size):
-                if vxfld_pkt is not None:
-                    send_pkt(vxfld_pkt, addr)
-                    packet_count += 1
-                    if packet_count % self.__VXFLD_PKT_BURST_SIZE == 0:
-                        eventlet.sleep(1)
-                if msgtype == VXFLD.MsgType.REFRESH:
-                    # Set originator to 0 so that peers don't forward on
-                    vxfld_pkt = (
-                        VXFLD.Packet(type=VXFLD.MsgType.REFRESH,
-                                     version=version,
-                                     inner={'holdtime': holdtime,
-                                            'originator': False,
-                                            'response_type':
-                                                VXFLD.ResponseType.NONE,
-                                            'identifier': identifier})
-                    )
-                else:
-                    vxfld_pkt = VXFLD.Packet(type=VXFLD.MsgType.SYNC,
-                                             version=version,
-                                             inner={'identifier': identifier})
-            vxfld_pkt.data.vni_vteps = {vni: msgdata}
-        if vxfld_pkt is None:
-            if msgtype == VXFLD.MsgType.SYNC:
-                # The sender will continue retrying until it gets a response
-                send_pkt(VXFLD.Packet(type=VXFLD.MsgType.SYNC,
-                                      version=version,
-                                      inner={'identifier': identifier}), addr)
-        elif vxfld_pkt.data.vni_vteps:
-            send_pkt(vxfld_pkt, addr)
 
     def __send_vxfld_proxy(self, vxlan_pkt, addr):
         """ Generate a VXFLD Proxy packet and send it.
@@ -843,35 +887,32 @@ class _Vxsnd(service.Vxfld):
         self.__send_to_peers(pkt, self._conf.vxfld_proxy_servers)
 
     def __update_fdb(self, vni_dict, holdtime, identifier=_Fdb.DEFAULT_ID,
-                     refresh=True):
-        """ Updates the SND's fdb and sends refresh messages to its peers.
-        :param vni_dict: a dictionary mapping vni to a collection of ip
+                     sync=True):
+        """ Updates the SND's fdb and sends a sync message to its peers.
+        :param vni_dict: a dictionary mapping a vni to a collection of ip
                          addresses
         :param holdtime: set to non-zero to add entries and 0 to remove them
         :param identifier: identifies the RD. Set to DEFAULT_ID if addresses
-                           are added by the SND.
-        :param refresh: set to True to send a refresh message to peers
+                           are to be added by the SND
+        :param sync: set to True to send a sync message to peers
+        :raises: socket.error when sync=True
         """
+        vteps = collections.defaultdict(list)
         for vni, ip_addr_set in vni_dict.iteritems():
             for ip_addr in ip_addr_set:
-                try:
-                    socket.inet_aton(ip_addr)
-                    if holdtime:
-                        self.__fdb.update(vni, ip_addr, holdtime, identifier)
-                    else:
-                        self.__fdb.remove(vni, ip_addr, identifier)
-                except Exception:  # pylint: disable=broad-except
-                    raise
+                if holdtime:
+                    self.__fdb.update(vni, ip_addr, holdtime, identifier)
+                else:
+                    self.__fdb.remove(vni, ip_addr, identifier)
+                vteps[vni].append((ip_addr, holdtime, identifier))
         refresh_addrs = self.__vxfld_refresh_servers
         if self._conf.refresh_proxy_servers:
             refresh_addrs.update(self._conf.vxfld_proxy_servers)
-        if refresh and refresh_addrs:
+        if sync and refresh_addrs:
+            pkt_args = {'response_type': VXFLD.ResponseType.NONE}
             for addr in refresh_addrs - self.__vxfld_addresses:
-                self.__send_vxfld_pkt(addr, vni_dict,
-                                      {'holdtime': holdtime,
-                                       'identifier': identifier,
-                                       'msgtype': VXFLD.MsgType.REFRESH,
-                                       'version': VXFLD.VERSION})
+                sock = self.__send_sync_pkt(addr, pkt_args, vteps=vteps)
+                sock.close()
 
 
 def main():
