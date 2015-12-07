@@ -16,7 +16,7 @@
 # Foundation, Inc.
 # 51 Franklin Street, Fifth Floor
 # Boston, MA  02110-1301, USA.
-""" This module provides methods to parse RT netlink messages.
+""" This module provides methods to parse RTNL messages.
 """
 import socket
 import struct
@@ -25,7 +25,7 @@ from vxfld.common.enums import OperState
 
 
 class DecodeError(Exception):
-    """ Indicates an error in decoding the packet.
+    """ Indicates an error in decoding a packet.
     """
     # pylint: disable=too-few-public-methods
     RTA_PARSE_ERROR = 0
@@ -40,7 +40,7 @@ class DecodeError(Exception):
 
 class _DecodeType(object):
     """ Provides methods to extract data from the packet based on the
-    attribute type.
+    type of attribute.
     """
     # pylint: disable=missing-docstring,too-few-public-methods
     UINT8 = 0
@@ -73,12 +73,12 @@ class _DecodeType(object):
 
     @classmethod
     def decode(cls, attr_type, data, offset, length=0):
-        """ Returns the value at an offset based on the type of attribute.
+        """ Returns a value based on the type of attribute.
         :param attr_type: one of the variables of this class
         :param data: packet buffer
-        :param offset: starting offset for decoding message
+        :param offset: offset for decoding
         :param length: rta length; needed for decoding string type attributes
-        :returns: decoded value based on attribute type
+        :returns: decoded value based on the type of attribute
         """
         offset += Decoder.RTATTR_LEN
         if attr_type == cls.UINT8:
@@ -155,7 +155,7 @@ class IflaLinkInfo(object):
 
 
 class IflaVxlan(object):
-    """ IFLA_LINKINFO_DATA attributes for vxlan.
+    """ IFLA_LINKINFO_DATA attributes for VXLAN.
     """
     # pylint: disable=too-few-public-methods
     IFLA_VXLAN_UNSPEC = 0
@@ -185,7 +185,7 @@ class IflaVxlan(object):
     IFLA_VXLAN_REMCSUM_NOPARTIAL = 24
     IFLA_VXLAN_COLLECT_METADATA = 25
 
-    # Provides a _DecodeType for the attributes that are of interest to us.
+    # Attributes of interest to us.
     DECODE_MAP = {
         IFLA_VXLAN_ID: _DecodeType.UINT32,
         IFLA_VXLAN_GROUP: _DecodeType.IPV4ADDR,
@@ -199,10 +199,10 @@ class IflaVxlan(object):
 
     @classmethod
     def decode(cls, rta_type, data, offset):
-        """ Returns the value based on the type of attribute.
-        :param rta_type: used to retrieve _DecodeType from the DECODE_MAP
+        """ Returns a value based on the type of attribute.
+        :param rta_type: type of attribute
         :param data: packet buffer
-        :param offset: starting offset for decoding message
+        :param offset: starting offset
         :returns: decoded value based on rta type
         """
         return _DecodeType.decode(cls.DECODE_MAP[rta_type], data, offset)
@@ -244,7 +244,7 @@ class RtnlMsgType(object):
 
 
 class Decoder(object):
-    """ Provides methods to extract attributes from the netlink message.
+    """ Provides methods to extract attributes from a netlink message.
     """
     __ALIGN_TO = 4
 
@@ -259,7 +259,6 @@ class Decoder(object):
     IFINDEX = 'ifindex'
     RTATTR_LEN = struct.calcsize(__RTATTR_FMT)
 
-    # currently, vxlan is the only IFLA_INFO_KIND that we support
     SUPPORTED_KINDS = ['vxlan']
 
     def __init__(self, data):
@@ -267,12 +266,12 @@ class Decoder(object):
 
     @staticmethod
     def padded(length):
-        """ Returns the length aligned to ALIGN_TO byte boundary
+        """ Returns length aligned to the ALIGN_TO byte boundary
         """
         return (length + Decoder.__ALIGN_TO - 1) & ~(Decoder.__ALIGN_TO - 1)
 
     def decode_ifinfomsg(self, offset=0):
-        """ Decodes the ifinfo message
+        """ Decodes an IFINFO message.
         0                   1                   2                   3
         0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
         +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -284,8 +283,8 @@ class Decoder(object):
         +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
         |                      Change Mask                              |
         +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-        :param offset: starting offset for decoding message
-        :returns: ifi_index extracted from the message
+        :param offset: offset for decoding
+        :returns: ifi_index in the message
         """
         _, _, _, ifi_index, _, _ = (
             struct.unpack_from(self.__IFINFOMSG_FMT,
@@ -295,7 +294,7 @@ class Decoder(object):
         return ifi_index
 
     def decode_nlhdr(self, offset=0):
-        """ Decodes the netlink header
+        """ Decodes the netlink header.
         0                   1                   2                   3
         0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
         +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -307,8 +306,8 @@ class Decoder(object):
         +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
         |                      Process ID (PID)                       |
         +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-        :param offset: starting offset for decoding message
-        :returns: a tuple composed of the netlink message length and netlink
+        :param offset: offset for decoding
+        :returns: tuple composed of the netlink message length and netlink
                   message type.
         """
         nlmsg_len, nlmsg_type, _, _, _ = (
@@ -318,13 +317,13 @@ class Decoder(object):
 
     def decode_rtas(self, msg_len, offset=0, linkinfo=False,
                     linkinfo_data=False):
-        """ Extracts the IFLA attributes from the netlink message.
-        :param msg_len: length of message
-        :param offset: starting offset for decoding message
+        """ Extracts IFLA attributes from a netlink message.
+        :param msg_len: message length
+        :param offset: offset for decoding
         :param linkinfo: set to True for IflaLinkInfo attributes
         :param linkinfo_data: set to True for IflaVxlan attributes
-        :return: a dictionary mapping link attributes to their values
-                 extracted from the message.
+        :return: dictionary mapping link attributes to their values extracted
+                 from the message.
         """
         result = {}
         while msg_len - offset >= self.RTATTR_LEN:
@@ -375,10 +374,10 @@ class Decoder(object):
         return result
 
     def decode(self, offset=0):
-        """ Main method that decodes the netlink message.
-        :param offset: starting offset for decoding message
-        :return: a dictionary mapping link attributes to their values
-                 extracted from the message.
+        """ Decodes a RTNL message.
+        :param offset: offset for decoding
+        :returns: dictionary mapping link attributes to their values extracted
+                  from the message
         """
         result = {}
         nlmsg_len, _ = self.decode_nlhdr(offset)

@@ -30,12 +30,12 @@ from . import vxfld_pb2
 # Protocol version
 VERSION = 3
 
-# UDP header length
+# UDP header byte length
 BASE_PKT_SIZE = len(ethernet.Ethernet()) + len(ip.IP()) + len(udp.UDP())
 
 
 class MsgType(object):
-    """ VXFLD message types.
+    """ VXFLD message type.
     """
     # pylint: disable=too-few-public-methods
     UNKNOWN = 0     # Never used
@@ -56,7 +56,7 @@ class PktError(Exception):
 
 
 class ResponseType(object):
-    """ Refresh packet response types.
+    """ Packet response type.
     """
     # pylint: disable=too-few-public-methods
     NONE = 0
@@ -66,13 +66,15 @@ class ResponseType(object):
     def __init__(self):
         raise NotImplementedError
 
-
 class _Refresh(dpkt.Packet):
     """ Common code for Refresh Packets.
+    NOTE: provides backward compatibility for protocol versions <= 2.
+    Protocol versions >= 3 should use protobuf for
+    serialization/deserialization.
     """
     # pylint: disable=missing-docstring
     class VtepsStruct(object):
-        """ Provides methods to pack/unpack Vni/IpStruct informtaion to and
+        """ Provides methods to pack/unpack Vni/IpStruct information to and
         from the packet.
         """
         # pylint: disable=missing-docstring
@@ -108,11 +110,11 @@ class _Refresh(dpkt.Packet):
             return vni, iplist
 
     def __init__(self, data=None, **kwargs):
-        # Don't call super due to how dpkt works
+        # Don't call super due to how dpkt works.
         dpkt.Packet.__init__(self, **kwargs)
         self.__vni_vteps = {}
         self.__vtep_struct = self.VtepsStruct()
-        # V1 didn't use response_type field, it just always send it.
+        # V1 didn't use response_type field.
         if not hasattr(self, 'response_type'):
             setattr(self, 'response_type', ResponseType.ALL)
         if data is not None:
@@ -134,9 +136,17 @@ class _Refresh(dpkt.Packet):
         )
 
     def ipstr_len(self, _, iplist):
+        """ Returns the serialized byte count for iplist.
+        :param iplist: list of IP addresses
+        :type iplist: list[str]
+        :return: serialized byte count for iplist
+        """
         return self.__vtep_struct.len(iplist)
 
     def unpack(self, buf):
+        """ Unpacks VNI/VTEP information from the packet.
+        :param buf: packet buffer
+        """
         dpkt.Packet.unpack(self, buf)
         offset = 0
         while offset < len(self.data):
@@ -146,15 +156,17 @@ class _Refresh(dpkt.Packet):
 
     @property
     def vni_vteps(self):
-        """ Gets the _vni_vteps instance variable.
-        :returns: Dictionary mapping VNIs to a list of IP addresses.
+        """ Returns the _vni_vteps instance variable.
+        :returns: dictionary mapping a VNI to a list of IP addresses
+        :rtype: dict[int, list(str)]
         """
         return self.__vni_vteps
 
     @vni_vteps.setter
     def vni_vteps(self, vteps):
         """ Sets the _vni_vteps instance variable.
-        :param vteps: Dictionary mapping VNIs to a list of IP addresses.
+        :param vteps: maps a VNI to a list of IP addresses
+        :type vteps: dict[int, list[str]]
         """
         for vni, ip_addr_list in vteps.iteritems():
             self.__vni_vteps.setdefault(vni, [])
@@ -181,7 +193,7 @@ class _RefreshV2(_Refresh):
 
 
 class Packet(dpkt.Packet):
-    """ VXLFD packets are sent between vxsnd and vxrd entities.
+    """ VXFLD packet header common to all types of messages.
     """
     __hdr__ = (
         ('version', 'B', VERSION),  # version of the protocol Packet
@@ -241,10 +253,20 @@ class Pb2Base(object):
 
     @staticmethod
     def _ipv4_pack(field, value):
+        """ Packs an IPv4 address into a protobuf message
+        :param field: protobuf field
+        :type field: vxfld_pb2.IPv4Address
+        :param value: IPv4 address string
+        """
         field.address.extend(int(ele) for ele in value.split('.'))
 
     @staticmethod
     def _ipv4_unpack(field):
+        """ Unpacks an IPv4 address from a protobuf message.
+        :param field: protobuf field
+        :type field: vxfld_pb2.IPv4Address
+        :returns: IPv4 address string
+        """
         return '.'.join(str(ele) for ele in field.address)
 
 
@@ -257,7 +279,8 @@ class Proxy(Pb2Base):
         super(Proxy, self).__init__(vxfld_pb2.Proxy, data=data, **kwargs)
 
     def add_proxy_ip(self, ip_addr):
-        """ add_proxy_ip
+        """ Adds an address to the list of proxy IP addresses.
+        :param ip_addr: proxy IP address
         """
         if self._msg.proxy_ips and ip_addr not in self._msg.proxy_ips:
             ele = self._msg.proxy_ips.add()
@@ -266,7 +289,8 @@ class Proxy(Pb2Base):
 
     @property
     def srcip(self):
-        """ SrcIp
+        """ Returns the sending VTEP's source IP address.
+        :returns: sending VTEP's source IP address
         """
         if self.srcip_a is None:
             self.srcip_a = self._ipv4_unpack(self._msg.srcip_n)
@@ -274,7 +298,8 @@ class Proxy(Pb2Base):
 
     @srcip.setter
     def srcip(self, value):
-        """ Sets the sending VTEP source IP address in the VXFLD proxy packet.
+        """ Sets the sending VTEP's source IP address.
+        :param value: sending VTEP's source IP address
         """
         self.srcip_a = value
         self._ipv4_pack(self._msg.srcip_n, value)
@@ -299,12 +324,19 @@ class Refresh(Pb2Base):
 
     @classmethod
     def ipstr_len(cls, vni, data):
+        """ Returns the serialized byte count for {vni: data}.
+        :param vni: VXLAN network identifier
+        :param data: list of IP addresses
+        :type data: list[str]
+        :return: serialized byte count for {vni: data}
+        """
         return cls.__serialize({vni: data}).ByteSize()
 
     @property
     def vni_vteps(self):
-        """ Gets the _vni_vteps instance variable.
-        :returns: Dictionary mapping VNIs to a list of IP addresses.
+        """ Returns the _vni_vteps instance variable.
+        :returns: dictionary mapping a VNI to a list of IP addresses
+        :rtype: dict[int, list[str]]
         """
         output = {}
         for vtep in self._msg.vteps:
@@ -316,7 +348,8 @@ class Refresh(Pb2Base):
     @vni_vteps.setter
     def vni_vteps(self, vteps):
         """ Sets the _vni_vteps instance variable.
-        :param vteps: Dictionary mapping VNIs to a list of IP addresses.
+        :param vteps: maps a VNI to a list of IP addresses
+        :type vteps: dict[int, list[str]]
         """
         for vni, entries in vteps.iteritems():
             vtep = self._msg.vteps.add()
@@ -343,13 +376,21 @@ class Sync(Pb2Base):
 
     @classmethod
     def ipstr_len(cls, vni, data):
+        """ Returns the serialized byte count for {vni: data}.
+        :param vni: VXLAN network identifier
+        :param data: list of tuples composed of an IP address, holdtime and
+                     node identifier
+        :type data: list[(str, int, int)]
+        :return: serialized byte count for {vni: data}
+        """
         return cls.__serialize({vni: data}).ByteSize()
 
     @property
     def vni_vteps(self):
-        """ Gets the _vni_vteps instance variable.
-        :returns: Dictionary mapping VNIs to a list of tuples composed
-                  of the ip address, holdtime and node identifier.
+        """ Returns the _vni_vteps instance variable.
+        :returns: dictionary mapping a VNI to a list of tuples composed of an
+                  IP address, holdtime and node identifier
+        :rtype: dict[int, list[(str, int, int)]]
         """
         output = {}
         for vtep in self._msg.vteps:
@@ -362,8 +403,9 @@ class Sync(Pb2Base):
     @vni_vteps.setter
     def vni_vteps(self, vteps):
         """ Sets the _vni_vteps instance variable.
-        :param vteps: Dictionary mapping VNIs to a list of tuples composed
-        of the ip address, holdtime and node identifier.
+        :param vteps: maps a VNI to a list of tuples composed of an IP
+                      address, holdtime and node identifier
+        :type vteps: dict[int, list[(str, int, int)]]
         """
         for vni, entries in vteps.iteritems():
             vtep = self._msg.vteps.add()

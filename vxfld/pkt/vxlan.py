@@ -23,9 +23,7 @@ import dpkt
 
 
 class VXLAN(dpkt.Packet):
-    """ VXLAN header parsing/editing.  Derived from DPKT and so dpkt module
-    must be installed.
-
+    """ VXLAN header parsing/editing.
     VLXAN per draft-mahalingam-dutt-dcops-vxlan-00.txt
     The packing is pretty funky, so the two fields that actually matter;
     the I flag and VNI are formed as properties (i and vni) in the constructor

@@ -37,14 +37,14 @@ from vxfld.common.enums import LogDestination
 
 
 class Vxfld(object):
-    """ Abstract base class that provides methods common to both Vxsnd and
-    Vxrd.
+    """ Abstract base class that provides methods common to both vxsnd and
+    vxrd.
     """
     __metaclass__ = ABCMeta
 
     def __init__(self, conf):
         self._conf = conf
-        # Set up signal handlers before daemonizing
+        # Set up signal handlers before daemonizing.
         self.__setup_signal_handlers()
         self.__daemon_context = daemon.DaemonContext(
             working_directory='/var/run'
@@ -84,7 +84,8 @@ class Vxfld(object):
 
     @abstractmethod
     def _process(self, msg):
-        """ Returns a response object and an Exception object. The
+        """ Process requests from a mgmt. client.
+        Must return a response object and an Exception object. The
         latter is None if no exception.
 
         Over-ride this method in the derived class
@@ -93,12 +94,12 @@ class Vxfld(object):
 
     @abstractmethod
     def _run(self):
-        """ Run method to be implemented by the Derived class.
+        """ Run method to be implemented by the derived class.
         """
         raise NotImplementedError
 
     def _serve(self, sock, handle, pool=None, bufsize=None, err_cbs=None):
-        """ Runs a udp listener on the supplied socket.  Calls the function
+        """ Runs a udp listener on the supplied socket. Calls the function
         *handle* in a separate greenthread for every incoming datagram.
         *handle* takes two arguments: packet buffer and client address.
         """
@@ -136,8 +137,7 @@ class Vxfld(object):
                 return
 
     def _stop_checker(self, green_thread):
-        """ Propagates exceptions raised by a green thread to the run
-        green thread.
+        """ Propagates exceptions to the run green thread.
         """
         try:
             green_thread.wait()
@@ -184,7 +184,7 @@ class Vxfld(object):
         """ Once upon a time...
         """
         try:
-            # Make sure that I am not already running
+            # Make sure that I am not already running.
             pid = os.getpid()
             self.__pidfd.lock()
             self.__pidfd.write(pid)

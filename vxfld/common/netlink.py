@@ -16,8 +16,7 @@
 # Foundation, Inc.
 # 51 Franklin Street, Fifth Floor
 # Boston, MA  02110-1301, USA.
-""" This module contains classes that provide methods to handle netlink
-notifications.
+""" This module provides classes with methods to handle netlink notifications.
 """
 import collections
 import os
@@ -37,7 +36,7 @@ from vxfld.common.netlink_decoder import (Decoder,
 
 
 class VxlanDevice(object):
-    """ Stores Vxlan device related information.
+    """ Stores VXLAN device related information.
     """
     # pylint: disable=too-few-public-methods,too-many-arguments
     def __init__(self, ifindex, dev_name, state, vni, local, dstport=None,
@@ -58,8 +57,8 @@ class VxlanDevice(object):
 
 
 class Netlink(object):
-    """ Provides methods to parse RTNL netlink messages and invoke callbacks
-    based on message type.
+    """ Provides methods to parse RTNL messages and invoke callbacks based on
+    the message type.
     """
     # pylint: disable=too-many-instance-attributes
     NETLINK_ROUTE = 0            # Routing/device hook
@@ -85,22 +84,22 @@ class Netlink(object):
 
     def __dispatcher(self):
         """ Main thread that drains interface queues by invoking handler
-        methods based on message type.
+        methods based on the message type.
 
-        Netlink messages for different interfaces can be served concurrently,
+        Netlink messages for different interfaces can be served concurrently;
         however, strict ordering must be maintained between messages
         for the same interface. In order to facilitate this, a queue is
         allocated on a per interface basis, and the dispatcher uses a
-        modified FCFS algorithm to schedule threads for messages in interface
+        modified FCFS algorithm to schedule threads for messages in these
         queues.
 
         Dispatch algorithm:
         The dispatcher monitors the intfevent queue for interface events. On
-        receiving a new notification, it checks to see if the there are
-        pending netlink messages for the interface. If no other thread is
-        serving the same interface, it spawns one to handle the first message
-        in the queue. When the new thread is done, it notifies the dispatcher
-        by placing the ifindex of the interface in the intfevent queue.
+        receiving a new event, it checks to see if another thread is
+        serving the same interface. If not, it spawns one to handle the first
+        message in the interface's queue. When the new thread is done, it
+        notifies the dispatcher by placing the interface's index on the
+        "intfevent" queue.
         """
         while True:
             ifindex = self.__intfevent.get()
@@ -124,8 +123,7 @@ class Netlink(object):
         return next((val for attr, val in attrs or [] if attr == key), None)
 
     def __stop_checker(self, green_thread):
-        """ Propagates exceptions raised by a green thread to the dispatcher
-        green thread.
+        """ Propagates exceptions to the dispatcher green thread.
         """
         ifindex = None
         try:
@@ -138,14 +136,14 @@ class Netlink(object):
         self.__intfevent.put(ifindex)
 
     def bind(self):
-        """ Binds the netlink socket and initializes datastructures used for
-        communication between dispatcher and server.
+        """ Binds the netlink socket and initializes data structures used for
+        communication between the dispatcher and the server.
         """
         if self.socket is not None:
             try:
                 self.socket.close()
             except socket.error:
-                # Ignore the error as we will try to rebind
+                # Ignore the error as we will try to rebind.
                 pass
         self.__intfqueue = collections.defaultdict(eventlet.Queue)
         while self.__running:
@@ -156,13 +154,13 @@ class Netlink(object):
             self.socket = socket.socket(socket.AF_NETLINK,
                                         socket.SOCK_RAW,
                                         self.NETLINK_ROUTE)
-            # Set rcv buffer size to 30M (higher than the rmem_max of 8M)
+            # Set rcv. buffer size to 30M (higher than the rmem_max of 8M).
             self.socket.setsockopt(socket.SOL_SOCKET,
                                    self.__SO_RCVBUFFORCE,
                                    self.__BUF_SIZE)
         except socket.error as ex:
             raise RuntimeError('open: socket err: %s' % ex)
-        # Open a socket for receiving netlink msgs
+        # Open a socket for receiving netlink msgs.
         try:
             # PID_MAX_LIMIT is 2^22 allowing 1024 sockets per-pid. We
             # start with 1 in the upper space (top 10 bits) instead of
@@ -173,15 +171,15 @@ class Netlink(object):
         except socket.error as ex:
             raise RuntimeError('bind: socket err: %s' % ex)
 
-    def handle_netlink_msg(self, buf, _):
-        """ Parses incoming RTNL netlink messages and places the result
-        on the interface queue identified by the ifindex.
-        The dispatcher is notified by placing the ifindex on the intfevent
-        queue.
+    def handle_netlink_msg(self, pkt, _):
+        """ Parses an incoming RTNL message and places the result on a queue
+        identified by the interface's index. Notifies the dispatcher by
+        placing the interface's index on the "intfevent" queue.
+        :param pkt: netlink message
         """
         offset = 0
-        decoder = Decoder(buf)
-        while offset < len(buf):
+        decoder = Decoder(pkt)
+        while offset < len(pkt):
             msg_len, msg_type = decoder.decode_nlhdr(offset)
             if msg_type in self.__process_cbs:
                 try:

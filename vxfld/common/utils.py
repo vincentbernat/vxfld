@@ -46,7 +46,7 @@ class _CompressedRotatingFileHandler(logging.handlers.RotatingFileHandler):
         """ do a rollover; in this case, a date/time stamp is appended to the
         filename when the rollover happens.  However, you want the file to be
         named for the start of the interval, not the current time.  If there
-        is a backup count, then we have to get a list of matching filenames,
+        is a backup count, then we have to get a list of matching file names,
         sort them and remove the one with the oldest suffix.
         """
         if self.stream:
@@ -74,9 +74,10 @@ class _CompressedRotatingFileHandler(logging.handlers.RotatingFileHandler):
 
 def common_parser(node_type):
     """ Argparser for common command-line arguments.
-    :param node_type (NodeType): can be vxrd or vxsnd
+    :param node_type: can be vxrd or vxsnd
+    :type node_type: NodeType
     :return: an argument parser object for parsing command line strings into
-    Python objects
+             python objects
     """
     prsr = argparse.ArgumentParser()
     if node_type == NodeType.VXRD:
@@ -102,9 +103,10 @@ def common_parser(node_type):
 def get_config_params(node_type, reloadable=False):
     """ Outputs a space separated list of configuration params supported by
     the daemon.
-    :param node_type (NodeType): can be vxrd or vxsnd
-    :param reloadable: if True, then only reloadable parameters are displayed
-    :return: None
+    :param node_type: can be vxrd or vxsnd
+    :type node_type: NodeType
+    :param reloadable: if True, only reloadable parameters are displayed
+    :returns: dictionary mapping configuration params to their values
     """
     conf = config.Config(node_type, '')
     print ' '.join({param for param in conf.get_params()
@@ -112,12 +114,15 @@ def get_config_params(node_type, reloadable=False):
 
 
 def get_logger(node_type, logdest, filehandler_args=None):
-    """ Return a logger for the specified node name, creating it if necessary.
-    :param node_type (NodeType): vxfld node type
-    :param logdest (LogDestination): log file destination
+    """ Returns a logger for the specified node name, creating it if necessary.
+    :param node_type: can be vxrd or vxsnd
+    :type node_type: NodeType
+    :param logdest: log file destination
+    :type logdest: LogDestination
     :param filehandler_args: dict that provides the 'filename' (mandatory),
-    'maxBytes' and 'backupCount' required by the rotating file handler
-    :return: logger object.
+                             'maxBytes' and 'backupCount' for the
+                             rotating file handler
+    :return: logger object
     """
     logger = logging.getLogger(node_type)
     lgr_fmt = '%%(asctime)s %s %%(levelname)s: %%(message)s' % node_type
@@ -146,8 +151,9 @@ def get_logger(node_type, logdest, filehandler_args=None):
 
 
 def load_configuration(node_type, args):
-    """ Load configuration.
-    :param node_type (NodeType): vxfld node type
+    """ Loads configuration from a file.
+    :param node_type: can be vxrd or vxsnd
+    :type node_type: NodeType
     :param args: parsed command-line arguments
     :return: a configuration (Config) object
     """
@@ -241,7 +247,8 @@ class SetEncoder(json.JSONEncoder):
 
     def default(self, obj):  # pylint: disable=method-hidden
         """ Returns a list on encountering a set object or a set as an
-        attribute of the object.
+        attribute of an object.
+        :param obj: input object
         """
         if isinstance(obj, set):
             return list(obj)

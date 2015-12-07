@@ -54,7 +54,7 @@ class _BridgeUtils(object):
     __CMD_PATH = '/sbin/bridge'
     __MAX_CMDS_PER_BATCH = 2000
 
-    # bridge fdb operations
+    # Bridge fdb operations.
     ADD = 'append'
     DEL = 'del'
 
@@ -71,10 +71,10 @@ class _BridgeUtils(object):
             raise OSError('Failed to update bridge fdb')
 
     def add_entry(self, operation, dev_name, ip_address):
-        """ Appends an entry to the entries list.
-        :param operation: Can be one of ADD and DEL
+        """ Appends an entry to the list of bridge fdb commands.
+        :param operation: can be one of ADD and DEL
         :param dev_name: device name
-        :param ip_address: peer ip address
+        :param ip_address: peer IP address
         """
         if operation not in (self.ADD, self.DEL):
             raise RuntimeError('Invalid operation %s' % operation)
@@ -85,12 +85,11 @@ class _BridgeUtils(object):
     @classmethod
     def get_hrep_macs(cls):
         """ Parses the output of 'bridge fdb show' and returns the results.
-        :returns: dictionary mapping the VXLAN device name to a set of IP
-                  address.
+        :returns: maps device names to IP addresses
+        :rtype: dict[str, set(str)]
         :raises OSError: when the operation fails
         """
         dev_map = collections.defaultdict(set)
-        # Map the device to bridge fdb entries.
         cmd = (
             '%s fdb show | /bin/grep %s ; ( echo $PIPESTATUS )' % (
                 cls.__CMD_PATH, cls.__BRPORT_MAC_ADDR
@@ -123,9 +122,9 @@ class _BridgeUtils(object):
             raise OSError('%s returned non-zero exit code' % cmd)
 
     def set_hrep_macs(self):
-        """ Updates the bridge fdb by calling the bridge command with the
-         temporary batch file as input.
-        :returns: True if successful, False otherwise.
+        """ Updates the bridge fdb table by executing the bridge command with
+        the temporary batch file as input.
+        :returns: True if successful, False otherwise
         :raises OSError: when the operation fails
         """
         status = True
@@ -147,7 +146,7 @@ class _BridgeUtils(object):
 
 
 class _DeviceConfig(object):
-    """ Used by the RD to track the VTEP configuration state.
+    """ VXLAN device config/runtime state.
     """
     # pylint: disable=too-few-public-methods
     class InvalidConfig(Exception):
@@ -182,7 +181,7 @@ class _DeviceConfig(object):
 
 
 class _Vxrd(service.Vxfld):
-    """ Main Class that provides methods used by the Vxlan Registration Daemon.
+    """ Main class that provides methods used by the VXLAN Registration Daemon.
     """
     __VXLAN_REGEX = re.compile(
         r'^\d+: (?P<dev_name>\S+):'
@@ -205,10 +204,10 @@ class _Vxrd(service.Vxfld):
             self._logger,
             pool=self._pool
         )
-        # socket for RD-SND communication
+        # socket for RD-SND communication.
         self.__sockpool = eventlet.pools.Pool(max_size=1)
-        # Send a message to the SND and flushes the bridge fdb entries when the
-        # process exits
+        # Send a message to the SND and flush bridge fdb entries when the
+        # process exits.
         atexit.register(self.__remove_vnis)
         if self._conf.head_rep:
             # HER: The RD limits the pool size to 1 to avoid parallel updates
@@ -218,11 +217,13 @@ class _Vxrd(service.Vxfld):
             # the SND.
             self.__last_response = None
             # Frequency at which the kernel state should be synced with the
-            # peerdb
+            # peerdb.
             self.__sync_ready = True
 
     def _process(self, msg):
-        """ Returns result object and Exception.
+        """ Process requests from a mgmt. client.
+        :returns: result object and Exception. Latter would be None if
+                  everything is good
         """
         # pylint: disable=too-many-branches,too-many-return-statements
         try:
@@ -267,11 +268,11 @@ class _Vxrd(service.Vxfld):
             return None, RuntimeError('Bad message')
 
     def _run(self):
-        """ Periodically sends the registration method to the svcnode address.
-        Usually at regular time intervals but may be accelerated if
-        membership has changed.
+        """ Periodically sends a registration message to the SND. Usually at
+        regular time intervals but may be accelerated if membership has
+        changed.
         """
-        # Open a socket for sending the refresh msgs
+        # Open a socket for sending refresh msgs.
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         # Couple of reasons for doing this
         # a) allows the RD and SND to bind to the same port if one of them
@@ -290,7 +291,7 @@ class _Vxrd(service.Vxfld):
         self.__initialize_db()
 
         if self._conf.head_rep:
-            # Spawn a thread for receiving refresh msgs from the SND
+            # Spawn a thread for receiving refresh msgs from the SND.
             self._pool.spawn_n(self._serve, sock, self.__handle_vxfld_msg,
                                pool=self.__herpool)
 
@@ -318,8 +319,7 @@ class _Vxrd(service.Vxfld):
                         # Try again in the next cycle
                         self.__next_sync_check = now + 1
                 # HER: Flush the peerdb and HREP MAC entries if the RD
-                # hasn't heard from the SND in more than holdtime
-                # seconds.
+                # hasn't heard from the SND in more than holdtime seconds.
                 if (self.__vni_config and self.__last_response is not None and
                         (now - self.__last_response) > self._conf.holdtime):
                     self._logger.warning('Lost contact with SND. Cleaning '
@@ -329,9 +329,9 @@ class _Vxrd(service.Vxfld):
             eventlet.sleep(1)
 
     def __add_iface(self, dev_config):
-        """ Adds an interface to the FDB and notifies the SND by sending it a
-        refresh message.
-        :param dev_config (VxlanDevice): VXLAN device configuration
+        """ Adds an interface to the FDB and sends a refresh message to the
+        SND.
+        :param dev_config: VxlanDevice object
         :returns: VXLAN device ifindex
         """
         try:
@@ -364,7 +364,7 @@ class _Vxrd(service.Vxfld):
     def __del_iface(self, dev_config, update=False):
         """ Removes an interface from the FDB. Notifies the SND by sending
         a refresh message with holdtime set to 0.
-        :param dev_config (VxlanDevice): VXLAN device configuration
+        :param dev_config: VxlanDevice object
         :returns: VXLAN device ifindex
         """
         vni = int(dev_config.vni)
@@ -381,9 +381,10 @@ class _Vxrd(service.Vxfld):
 
     def __get_vxlan_config(self):
         """ Parses the output of 'ip link show' and 'bridge fdb show' (if HER
-        is enabled) to map a VNI to a _DeviceConfig object.
-        :returns: dictionary mapping VNIs to _DeviceConfig objects if
-                  successful, otherwise None.
+        is enabled) and returns the result.
+        :returns: dictionary mapping a VNI to a DeviceConfig object if
+                  successful, otherwise None
+        :rtype: dict[int, DeviceConfig] | None
         """
         vni_config = {}
         dev_map = collections.defaultdict(set)
@@ -426,16 +427,16 @@ class _Vxrd(service.Vxfld):
             self._logger.error('%s returned non-zero exit code', cmd)
             return None
 
-    def __handle_vxfld_msg(self, buf, addr):
-        """ HER: Handles the VXFLD message.
-        :param buf: socket buffer
-        :param addr: source address
+    def __handle_vxfld_msg(self, pkt, addr):
+        """ HER: Handles a VXFLD message.
+        :param pkt: socket buffer
+        :param addr: tuple composed of the sender's address and port
         """
         # pylint: disable=no-member
         srcip, _ = addr
         self.__last_response = int(time.time())
         try:
-            vxfld_pkt = VXFLD.Packet(buf)
+            vxfld_pkt = VXFLD.Packet(pkt)
         except Exception as ex:  # pylint: disable=broad-except
             self._logger.error('Unknown VXFLD packet received from %s: %s',
                                srcip, ex.message)
@@ -484,15 +485,15 @@ class _Vxrd(service.Vxfld):
         self.__next_refresh = int(time.time()) + 1
 
     def __new_vxlan_device(self, dev_name, localip, svcnodeip, state):
-        """ Returns a _DeviceConfig object after validating the inputs to
-        this method.
-        :param dev_name: VXLAN device name
-        :param localip: VXLAN device localip
-        :param svcnodeip: VXLAN device remoteip
-        :param state: VXLAN device operational state
-        :return: a _DeviceConfig object if successfull, otherwise raises
-        an Exception.
-        :raises: _DeviceConfig.InvalidConfig or _DeviceConfig.NonOperational
+        """ Returns a DeviceConfig object after validating inputs to this
+        method.
+        :param dev_name: device name
+        :param localip: local IP address
+        :param svcnodeip: svcnode IP address
+        :param state: operational state
+        :return: DeviceConfig object if successful, otherwise raises
+                 an Exception.
+        :raises: DeviceConfig.InvalidConfig or DeviceConfig.NonOperational
         """
         if (localip is None or
                 (not self._conf.head_rep and svcnodeip is None)):
@@ -507,8 +508,8 @@ class _Vxrd(service.Vxfld):
                 'Device %s with state %s is not operational' % (dev_name,
                                                                 state)
             )
-        # If the svcnode_ip is not set in the configuration, then use the
-        # VTEP's svcnode IP in the kernel.
+        # Use the VTEP's svcnode IP in the kernel if it's missing in the
+        # daemon configuration.
         svcnode_ip = self._conf.svcnode_ip
         if (svcnode_ip == config.Config.CommonConfig.svcnode_ip.default and
                 svcnodeip is not None):
@@ -519,11 +520,10 @@ class _Vxrd(service.Vxfld):
 
     def __remove_vnis(self, vnis=None):
         """ Sends a refresh message to the SND with the holdtime set to 0 for
-        VNIs provided to this function as input. If none are provided, then
-        all VNIs in the config will be removed.
-        HER: When HER is enabled, HREP mac addresses for the VNIs will be
-        purged.
-        :param vnis: dictionary of format {vni1: DeviceConfig1, ...}.
+        VNIs passed to this method (defaults to all VNIs).
+        Purges HREP addresses from the bridge fdb table when HER is enabled.
+        :param vnis: maps VNIs to DeviceConfig objects
+        :type vnis: dict[int, DeviceConfig]
         """
         vnis = vnis or self.__vni_config
         self.__send_refresh(vnis, 0)
@@ -534,11 +534,12 @@ class _Vxrd(service.Vxfld):
 
     def __send_refresh(self, vni_data, hold):
         """ Sends a refresh message to the SND.
-        :param vni_data: dictionary mapping VNIs to DeviceConfig objects
-        :param hold: holdtimer
+        :param vni_data: maps VNIs to DeviceConfig objects
+        :type vni_data: dict[int, DeviceConfig]
+        :param hold: packet holdtime
         :returns: True if successful, False otherwise.
         """
-        # Build the right datastructure for the message
+        # Build the right data structure for the message
         # need msg_data as {svcnode: {vni: [local]}}
         pkt_pile = eventlet.GreenPile(self._pool)
         for svcnode, grouper in itertools.groupby(
@@ -562,7 +563,7 @@ class _Vxrd(service.Vxfld):
                                             'identifier':
                                                 self._conf.node_id})
                     )
-                    # We don't need an acknowledgement for delete messages
+                    # We don't require an acknowledgement for delete messages.
                     if self._conf.head_rep and hold != 0:
                         vxfld_pkt.data.response_type = (
                             VXFLD.ResponseType.REQUESTED
@@ -573,9 +574,9 @@ class _Vxrd(service.Vxfld):
         return not pkt_pile.used or reduce(operator.and_, pkt_pile, True)
 
     def __send_vxfld_pkt(self, pkt, addr):
-        """ Sends a vxfld refresh packet to the service node.
+        """ Sends a VXFLD refresh packet to the SND.
         :param pkt: packet buffer
-        :param addr: svcnode address
+        :param addr: tuple composed of the svcnode's addr and port
         :returns: True if successful, False otherwise.
         """
         self._logger.info('Sending to %s: Holdtime: %s', addr,
@@ -590,7 +591,7 @@ class _Vxrd(service.Vxfld):
             return False
 
     def __sync_peerdb(self):
-        """ HER: Keeps the peerdb in sync with the kernel state by updating
+        """ HER: Maintain sync between the daemon and kernel state by updating
         the bridge fdb table.
         """
         try:
@@ -608,8 +609,8 @@ class _Vxrd(service.Vxfld):
                 if vni_config.hrep_addrs ^ peerips - myaddr:
                     updated_vnis[vni] = peerips
             if dev_map:
-                # Flush HREP mac addresses from the bridge fdb table for
-                # non-operational devices
+                # Flush HREP addresses for non-operational devices from the
+                # bridge fdb table.
                 try:
                     with _BridgeUtils() as bridge_obj:
                         for dev_name, ip_addrs in dev_map.iteritems():
@@ -625,8 +626,8 @@ class _Vxrd(service.Vxfld):
 
     def __update_peerdb(self, updated_vnis):
         """ HER: Updates the peerdb and corresponding bridge fdb entries.
-        :param updated_vnis: dictionary mapping VNIs to a set of peer
-                             IP addresses
+        :param updated_vnis: maps VNIs to peer IP addresses
+        :type updated_vnis: dict[int, set[str]]
         :returns: True if successful, False otherwise.
         """
         try:
@@ -643,10 +644,10 @@ class _Vxrd(service.Vxfld):
                                            'iplist %s for VNI %d.', my_addr,
                                            ipset, vni)
                         continue
-                    # We update hrep_addrs assuming that the update to the
-                    # bridge fdb will succeed. Discrepancies between
-                    # kernel and local state will be handled during the
-                    # next config check cycle.
+                    # We update HREP addresses assuming that the update to the
+                    # bridge fdb will succeed. Discrepancies between kernel
+                    # and daemon state will be handled during the next config
+                    # check cycle.
                     self.__vni_config[vni].hrep_addrs = ipset - {my_addr}
                     self._logger.debug('Updating peer list for VTEP %s. new: '
                                        '%s. peerdb: %s, hrep: %s, myaddr: %s',

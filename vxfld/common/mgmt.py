@@ -28,11 +28,10 @@ import eventlet
 
 
 class MgmtServer(object):
-    """ The daemon runs the server object in a thread and
-    responds to these requests.  The response is two objects: the valid
+    """ The daemon runs the server object in a thread and responds to requests
+    from a client. The response is a tuple composed of two objects: a valid
     response if no error and an exception object if there is an error.
     One of the two should be None.
-    See the test code for typical usage.
     """
     # pylint: disable=too-few-public-methods
     __BUF_SIZE = 4 * 1024
@@ -60,7 +59,7 @@ class MgmtServer(object):
                                 '%s', ex)
 
     def run(self):
-        """ Start the mgmt server
+        """ Start the mgmt. server
         """
         try:
             os.remove(self.__uds_file)
@@ -79,8 +78,7 @@ class MgmtServer(object):
 
 
 class MgmtClient(socket.socket):
-    """A utility uses the client class to send a message to the daemon
-    with a request.
+    """ Utilities instantiate this class to send requests to the daemon.
     """
     __BUF_SIZE = 2 * 1024
 
@@ -94,7 +92,7 @@ class MgmtClient(socket.socket):
             raise RuntimeError(msg)
 
     def sendobj(self, msgobj):
-        """ Serializes and sends a request to the mgmt server. Deserializes
+        """ Serializes and sends a request to the mgmt. server. Deserializes
         and returns the response.
         """
         msg = pickle.dumps(msgobj, pickle.HIGHEST_PROTOCOL)

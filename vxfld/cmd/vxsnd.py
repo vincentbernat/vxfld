@@ -40,18 +40,18 @@ NODE_TYPE = NodeType.VXSND
 
 
 class _Fdb(object):
-    """ This class provies CRUD methods for the service node daemon's
+    """ This class provides CRUD methods for the service node daemon's
     forwarding database.
     """
-    # default identifier is used for addresses that are dynamically
+    # The default identifier is used for addresses that are dynamically
     # learned (software replication) or statically configured.
     DEFAULT_ID = 0
 
-    # holdtimer is a 8 bit field.
+    # Holdtimer is an 8 bit field.
     NO_AGE = 65535
 
     class NodeConfig(object):
-        """ Stores VTEP related information for a VNI.
+        """ VTEP information stored on a per VNI basis.
         """
         # pylint: disable=too-few-public-methods
         def __init__(self, addr, ageout=None, identifier=None):
@@ -76,12 +76,12 @@ class _Fdb(object):
             )
 
         def key(self):
-            """ Guarantees the uniqueness of an <addr, id> in a collection
+            """ Guarantees the uniqueness of an <addr, id> in a set
             """
             return '%s%s' % (self.addr, self.identifier)
 
     def __init__(self, logger):
-        # fdb[vni] = {NodeConfig1, NodeConfig2, ...}
+        """:type : set[NodeConfig]"""
         self.__data = {}
         self.__logger = logger
 
@@ -95,6 +95,7 @@ class _Fdb(object):
     @staticmethod
     def __find(vni_set, entry):
         """ Locates an entry in the vni_set passed to this method.
+        :returns: NodeConfig object if successful, otherwise None
         """
         return next((ele for ele in vni_set if entry == ele), None)
 
@@ -117,8 +118,11 @@ class _Fdb(object):
         self.__data = new_fdb
 
     def get(self, vni, now=None):
-        """ Returns a list of tuples composed of the ip address, adjusted
-        holdtime and node identifier for the VNI.
+        """ Returns information for all VTEPs in a VNI.
+        :param vni: VXLAN network identifier
+        :param now: current timestamp
+        :returns: list of tuples composed of the ip address, adjusted
+                  holdtime and node identifier
         """
         now = now or int(time.time())
         ret = []
@@ -130,13 +134,14 @@ class _Fdb(object):
         return ret
 
     def get_addrs(self, vni):
-        """ Returns all the IP addresses for a VNI in the FDB.
+        """ Returns all IP addresses in a VNI.
         """
         return {ele.addr for ele in self.__data.get(vni, set())}
 
     def get_static_addrs(self):
-        """ Returns all the static IP addresses in the FDB.
-        :returns: a dictionary mapping VNIs to a set of static IP addresses
+        """ Returns all static IP addresses in the FDB.
+        :returns: dictionary mapping VNIs to IP addresses
+        :rtype: dict[int, set[str]]
         """
         ret = {}
         for vni, ele_set in self.__data.iteritems():
@@ -147,7 +152,11 @@ class _Fdb(object):
         return ret
 
     def refresh(self, vni, addr, holdtime, identifier=None):
-        """ Refreshes a <vni, addr, id> in the fdb.
+        """ Refreshes a <vni, addr, id> in the FDB.
+        :param vni: VXLAN network identifier
+        :param addr: VTEP ip address
+        :param holdtime: packet holdtime
+        :param identifier: identifies the source of an address
         """
         if holdtime == self.NO_AGE:
             return
@@ -159,8 +168,12 @@ class _Fdb(object):
             ele.ageout = int(time.time()) + holdtime
 
     def rel_holdtime(self, vni=None):
-        """ This returns a copy of the fdb with the hold times adjusted to
-        be relative rather than absolute.  Used for display purposes.
+        """ Returns a copy of the fdb with the hold times adjusted to
+        be relative rather than absolute. Used for display purposes.
+        :param vni: VXLAN network identifier
+        :returns: dictionary mapping VNIs to tuples composed of the IP address,
+                  adjusted holdtime and node identifier
+        :rtype: dict[int, (str, int | str, int | str)]
         """
         now = int(time.time())
         if vni is None:
@@ -181,6 +194,9 @@ class _Fdb(object):
 
     def remove(self, vni, addr, identifier):
         """ Deletes the <vni, addr, id> from the fdb.
+        :param vni: VXLAN network identifier
+        :param addr: VTEP IP address
+        :param identifier: identifies the source of an address
         """
         if vni not in self.__data:
             return
@@ -194,7 +210,11 @@ class _Fdb(object):
 
     def update(self, vni, addr, holdtime, identifier=None):
         """ Updates this <vni, addr, id> in the fdb. Just update the ageout if
-        the <vni, addr, id> is already in the fdb.
+        the <vni, addr, id> is already in the FDB.
+        :param vni: VXLAN network identifier
+        :param addr: VTEP ip address
+        :param holdtime: packet holdtime
+        :param identifier: identifies the source of an address
         """
         ageout = holdtime
         if ageout != self.NO_AGE:
@@ -216,7 +236,7 @@ class _Fdb(object):
 
 
 class _Vxsnd(service.Vxfld):
-    """ Main Class that provides methods used by Vxlan Service Node Daemon.
+    """ Main Class that provides methods used by VXLAN Service Node Daemon.
     """
     __VXFLD_PKT_BURST_SIZE = 32
 
@@ -247,8 +267,9 @@ class _Vxsnd(service.Vxfld):
         self.__sync_response = False
 
     def _process(self, msg):
-        """ Returns result object and Exception.  Latter would be
-        None if everything is good
+        """ Process requests from a mgmt. client.
+        :returns: tuple composed of a result object and Exception.
+                  Latter would be None if everything is good.
         """
         # pylint: disable=too-many-branches
         ret = (None, RuntimeError('Unknown error'))
@@ -391,8 +412,8 @@ class _Vxsnd(service.Vxfld):
         self._conf.vxlan_dest_port = (
             self._conf.vxlan_dest_port or self._conf.vxlan_port
         )
-
-        # Install anycast address on lo and associated cleanup on exit
+        # Install an anycast address on the loopback interface and associate a
+        # cleanup method to be invoked on shutdown.
         if self._conf.install_svcnode_ip:
             if (self._conf.svcnode_ip ==
                     config.Config.CommonConfig.svcnode_ip.default):
@@ -400,14 +421,14 @@ class _Vxsnd(service.Vxfld):
             self.__add_ip_addr()
             atexit.register(self.__del_ip_addr)
 
-        # open the sockets
+        # Open the sockets
         try:
             if self._conf.enable_vxlan_listen:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 # Set SO_RCVBUF
                 # NOTE(cfb): Setting SO_RCVBUF results in the size being 2x the
-                # bytes passed to the setsockopt call. As such we
-                #             pass it as size/2.
+                # bytes passed to the setsockopt call. As such we pass it as
+                # size/2.
                 sock.setsockopt(socket.SOL_SOCKET,
                                 socket.SO_RCVBUF,
                                 self._conf.receive_queue / 2)
@@ -416,7 +437,7 @@ class _Vxsnd(service.Vxfld):
                 self._pool.spawn_n(self._serve, sock,
                                    self.__handle_vxlan_packet)
             if not self._conf.no_flood:
-                # Don't create this if not flooding.  Then I can run non-root
+                # Don't create this if not flooding.  Then I can run non-root.
                 self.__fsocketpool.create = (
                     lambda: socket.socket(socket.AF_INET,
                                           socket.SOCK_RAW,
@@ -425,7 +446,7 @@ class _Vxsnd(service.Vxfld):
             isock = None
             for ip_addr, port in self.__vxfld_addresses:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                # allows the RD and SND to bind to the same port if one of them
+                # Allows the RD and SND to bind to the same port if one of them
                 # is using a wildcard address.
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 sock.bind((ip_addr, port))
@@ -434,21 +455,21 @@ class _Vxsnd(service.Vxfld):
                 self._pool.spawn_n(self._serve, sock, self.__handle_vxfld_msg)
             if isock is not None:
                 self.__isocketpool.create = lambda: isock
-            if self._conf.src_ip:
-                tsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                tsock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                tsock.bind((self._conf.src_ip, self._conf.vxfld_port))
-                tsock.listen(max(len(self._conf.svcnode_peers), 5))
-                self._pool.spawn_n(self._serve_tcp, tsock,
-                                   self.__handle_vxfld_sync)
+            # Open a TCP socket for SND-SND communication.
+            tsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            tsock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            tsock.bind((self._conf.src_ip, self._conf.vxfld_port))
+            tsock.listen(max(len(self._conf.svcnode_peers), 5))
+            self._pool.spawn_n(self._serve_tcp, tsock,
+                               self.__handle_vxfld_sync)
         except socket.error as ex:
             raise RuntimeError('opening receive and transmit sockets : %s' %
                                ex)
 
-        # sync the fdb from peer snds
+        # Sync the fdb from peer SNDs
         self._pool.spawn(self.__resync_fdb).link(self._stop_checker)
 
-        # periodically ageout stale fdb entries
+        # Periodically ageout stale FDB entries.
         next_ageout = 0
         while True:
             now = int(time.time())
@@ -470,7 +491,7 @@ class _Vxsnd(service.Vxfld):
                 self._logger.debug('Addr %s already installed',
                                    self._conf.svcnode_ip)
             else:
-                # log warning and keep on trucking
+                # Log warning and keep on trucking.
                 self._logger.warning('Failed to install addr %s on interface. '
                                      'out:%s', self._conf.svcnode_ip,
                                      ex.output, exc_info=True)
@@ -490,11 +511,11 @@ class _Vxsnd(service.Vxfld):
                                  ex.output, exc_info=True)
 
     def __flood_vxlan_packet(self, pkt, addr, fwd_set):
-        """Floods vxlan data packets to addresses in the fwdlist passed to this
-        function.
+        """ Floods VXLAN data packets to the fwd_set.
         :param pkt: VXLAN pkt
         :param addr: tuple composed of the sender's IP addr and source port
-        :param fwd_set: set of ip addresses to which the packet should be fwded
+        :param fwd_set: set of ip addresses to which the packet should be
+                        forwarded
         """
         srcip, srcport = addr
         udp_packet = dpkt.udp.UDP(sport=srcport,
@@ -502,7 +523,7 @@ class _Vxsnd(service.Vxfld):
                                   data=pkt)
         udp_packet.ulen = len(udp_packet)
 
-        # Its quicker to replace the dstip for each VTEP rather than build
+        # It's quicker to replace the dstip for each VTEP rather than build
         # a new packet each time. As such start with a non-sensical dstip.
         ip_packet = dpkt.ip.IP(dst=socket.inet_aton(srcip),
                                src=socket.inet_aton(srcip),
@@ -512,7 +533,7 @@ class _Vxsnd(service.Vxfld):
         ip_packet.len = len(ip_packet)
         ip_packet_str = str(ip_packet)
         # UDP checksum computation is optional for IPv4. It isn't being used,
-        # so we should set it to the zero.
+        # so we should set it to zero.
         ip_packet_str = ip_packet_str[:26] + '\x00\x00' + ip_packet_str[28:]
         with self.__fsocketpool.item() as fsock:
             for dstip in fwd_set:
@@ -532,15 +553,15 @@ class _Vxsnd(service.Vxfld):
                     self._logger.error('Error sending flood packet to rd: %s',
                                        ex)
 
-    def __handle_vxfld_msg(self, buf, addr):
-        """ This is the entry function for the vxfld message.
-        :param buf: packet buffer
-        :param addr: tuple composed of the sender's IP addr and source port
+    def __handle_vxfld_msg(self, pkt, addr):
+        """ Handles VXFLD messages.
+        :param pkt: packet buffer
+        :param addr: tuple composed of the sender's IP addr and port
         """
         # pylint: disable=no-member
         srcip, _ = addr
         try:
-            pkt = VXFLD.Packet(buf)
+            pkt = VXFLD.Packet(pkt)
         except Exception as ex:  # pylint: disable=broad-except
             self._logger.error('Unknown VXFLD packet received from %s: %s',
                                srcip, ex.message)
@@ -554,9 +575,9 @@ class _Vxsnd(service.Vxfld):
                                pkt.type, srcip)
 
     def __handle_vxfld_proxy(self, pkt, addr):
-        """ Handle vxsnd to vxsnd proxy messages.
+        """ Handles vxsnd to vxsnd proxy messages.
         :param pkt: VXFLD pkt
-        :param addr: tuple composed of the sender's IP addr and source port
+        :param addr: tuple composed of the sender's IP addr and port
         """
         srcip, _ = addr
         self._logger.info('Proxy msg from %s', srcip)
@@ -566,7 +587,8 @@ class _Vxsnd(service.Vxfld):
             pkt.data.ttl -= 1
             pkt.data.add_proxy_ip(self._conf.proxy_id)
             if self._conf.vxfld_proxy_servers:
-                # Check to see if should only proxy packets from our local area
+                # Check to see if we should only proxy packets from our local
+                # area
                 if self._conf.proxy_local_only:
                     if self._conf.area is not None:
                         if pkt.data.area == self._conf.area:
@@ -597,34 +619,34 @@ class _Vxsnd(service.Vxfld):
                 self._logger.error('enable_flooding requires option "area"')
 
     def __handle_vxfld_refresh(self, pkt, addr):
-        """ Handle a membership refresh message.
+        """ Handles a membership refresh message.
         :param pkt: VXFLD pkt
-        :param addr: tuple composed of the sender's IP addr and source port
+        :param addr: tuple composed of the sender's IP addr and port
         """
         srcip, _ = addr
         self._logger.debug('Refresh msg from %s. Holdtime: %s', srcip,
                            pkt.data.holdtime)
         response_type = pkt.data.response_type
         # Set the response type to None in the refresh message before
-        # forwarding it on to peers
+        # forwarding it on to peers.
         pkt.data.response_type = VXFLD.ResponseType.NONE
-        # 0 is the default value of the field in the packet
+        # 0 is the default value of the field in the packet.
         identifier = getattr(pkt.data, 'identifier', 0) or None
         self.__update_fdb(pkt.data.vni_vteps, pkt.data.holdtime, identifier,
                           sync=False)
         if pkt.data.originator:
             if (self._conf.refresh_proxy_servers and
                     self._conf.vxfld_proxy_servers):
-                # Send the packet to our proxy servers
-                # Proxies may then re-forward so don't change originator
+                # Send the packet to our proxy servers. Proxies may then
+                # re-forward so don't change originator.
                 self.__send_to_peers(pkt, self._conf.vxfld_proxy_servers)
             # Send on to all peers but set originator to 0 so that they do
-            # not forward on
+            # not forward on.
             pkt.data.originator = False
             self.__send_to_peers(
                 pkt, self.__vxfld_refresh_servers - self.__vxfld_addresses
             )
-        # Check to see if the originator wants a refresh
+        # Check to see if the originator wants a refresh.
         if response_type:
             if response_type == VXFLD.ResponseType.REQUESTED:
                 vteps = pkt.data.vni_vteps
@@ -647,9 +669,9 @@ class _Vxsnd(service.Vxfld):
                                      'version': pkt.version})
 
     def __handle_vxfld_sync(self, sock, addr):
-        """ Handle vxsnd to vxsnd sync messages.
+        """ Handles vxsnd to vxsnd sync messages.
         :param sock: client socket
-        :param addr: tuple composed of the sender's IP addr and source port
+        :param addr: tuple composed of the sender's IP addr and port
         :returns: True if successful, False otherwise
         """
         # pylint: disable=no-member
@@ -658,7 +680,7 @@ class _Vxsnd(service.Vxfld):
             self._logger.info('Sync packet from %s', srcip)
             pkt = VXFLD.Packet(
                 b''.join(iter(lambda: sock.recv(self._conf.max_packet_size),
-                         b''))
+                              b''))
             )
             if pkt.data.vni_vteps:
                 self._logger.info('Sync data from %s', srcip)
@@ -686,9 +708,9 @@ class _Vxsnd(service.Vxfld):
         return False
 
     def __handle_vxlan_packet(self, pkt, addr, proxy=True, learn=True):
-        """ The entry point from the sock receive.
+        """ Handles VXLAN data packets.
         :param pkt: VXLAN pkt
-        :param addr: tuple composed of the sender's IP addr and source port
+        :param addr: tuple composed of the sender's IP addr and port
         :param proxy: set to True to forward the pkt to proxies
         :param learn: set to True to learn addresses from the pkt
         """
@@ -718,8 +740,8 @@ class _Vxsnd(service.Vxfld):
                     refresh &= identifier == _Fdb.DEFAULT_ID
                     continue
                 new_fwd_set.add(dstip)
-            # Refresh the hold time if the only entry in the fdb for the
-            # <vni, addr> is for a node with this DEFAULT_ID
+            # Refresh the hold time if the only entry in the fdb for a
+            # <vni, addr> is one that was added by the SND.
             if in_fdb and refresh:
                 self._logger.debug('Refreshing ip %s, vni %d from '
                                    'VXLAN pkt', srcip, vxlan_pkt.vni)
@@ -729,7 +751,7 @@ class _Vxsnd(service.Vxfld):
             if not self._conf.no_flood:
                 self.__flood_vxlan_packet(pkt, addr, new_fwd_set)
         if not in_fdb and learn:
-            # Add this <vni, srcip> to the fdb and tell peers about it
+            # Add the <vni, srcip> to the fdb and tell peers about it.
             self._logger.info('Learning ip %s, vni %d from VXLAN pkt', srcip,
                               vxlan_pkt.vni)
             try:
@@ -739,7 +761,7 @@ class _Vxsnd(service.Vxfld):
                 self._logger.debug('Failed to update fdb. %s', ex)
 
     def __resync_fdb(self):
-        """ Resyncs FDB from proxy and/or refresh servers
+        """ Resyncs the FDB from proxy and/or refresh servers.
         """
         while True:
             targets = set()
@@ -776,10 +798,11 @@ class _Vxsnd(service.Vxfld):
                 break
 
     def __send_refresh_pkt(self, addr, vteps, pkt_args):
-        """ Sends a VXLAN refresh pkt to the source addr.
-        :param addr: tuple composed of the sender's IP addr and source port
-        :param vteps: dictionary mapping vni to a list of ip addresses
-        :param pkt_args: dictionary composed of inner packet attributes
+        """ Sends a VXLAN refresh pkt. to the source addr.
+        :param addr: tuple composed of the sender's IP addr and port
+        :param vteps: maps VNIs to IP addresses
+        :type vteps: dict[int, set(str) | list(str)]
+        :param pkt_args: maps inner packet attributes to their values
         """
         # pylint: disable=missing-docstring
         def send_pkt(pkt_in, addr_in):
@@ -787,7 +810,7 @@ class _Vxsnd(service.Vxfld):
                 try:
                     isock.sendto(str(pkt_in), addr_in)
                 except Exception as ex:  # pylint: disable=broad-except
-                    # Socket not ready, buffer overflow etc
+                    # Socket not ready, buffer overflow etc.
                     self._logger.error('Failed to send vxfld pkt reply: %s',
                                        ex)
         packet_count = 0
@@ -796,7 +819,7 @@ class _Vxsnd(service.Vxfld):
         version = pkt_args.get('version', VXFLD.VERSION)
         vxfld_pkt = None
         for vni, msgdata in vteps.iteritems():
-            # Limit the refresh message to max_packet_size
+            # Limit the refresh message size to max_packet_size.
             if (vxfld_pkt is None or
                     VXFLD.BASE_PKT_SIZE + len(vxfld_pkt) +
                     vxfld_pkt.data.ipstr_len(vni, msgdata) >=
@@ -806,7 +829,7 @@ class _Vxsnd(service.Vxfld):
                     packet_count += 1
                     if packet_count % self.__VXFLD_PKT_BURST_SIZE == 0:
                         eventlet.sleep(1)
-                # Set originator to 0 so that peers don't forward on
+                # Set originator to 0 so peers don't forward on.
                 vxfld_pkt = (
                     VXFLD.Packet(type=VXFLD.MsgType.REFRESH,
                                  version=version,
@@ -821,12 +844,13 @@ class _Vxsnd(service.Vxfld):
             send_pkt(vxfld_pkt, addr)
 
     def __send_sync_pkt(self, addr, pkt_args, sock=None, vteps=None):
-        """ Generate and send a VXFLD Sync packet.
-        :param addr: tuple composed of the recepients's IP addr and dest. port
-        :param pkt_args: dictionary composed of the inner packet's attributes
+        """ Generates and sends a VXFLD sync pkt. to peer SNDs.
+        :param addr: tuple composed of the recipients' IP addr and port
+        :param pkt_args: maps inner packet attributes to their values
         :param sock: socket object
-        :param vteps: dictionary mapping a vni to a tuple composed of the
-                      ip address, holdtime and node identifier.
+        :param vteps: maps VNIs to tuples composed of a VTEP's IP address,
+                      holdtime and node identifier
+        :type vteps: dict[int, (str, int, int)]
         :returns: a socket object
         :raises: socket.error
         """
@@ -843,17 +867,17 @@ class _Vxsnd(service.Vxfld):
             sock.shutdown(socket.SHUT_WR)
             return sock
         except socket.error as ex:
-            # Socket not ready, buffer overflow etc
+            # Socket not ready, buffer overflow etc.
             if sock is not None:
                 sock.close()
             self._logger.error('Failed to send sync pkt: %s', ex)
             raise
 
     def __send_to_peers(self, pkt, servers):
-        """ Sends a pkt to one or more servers.
+        """ Sends a pkt. to one or more servers.
         :param pkt: VXFLD pkt
-        :param servers: set of tuples composed of the server's IP address and
-                        port
+        :param servers: set of tuples composed of the recipients' IP address
+                        and port
         """
         with self.__isocketpool.item() as isock:
             for ip_addr, port in servers - self.__vxfld_addresses:
@@ -867,9 +891,9 @@ class _Vxsnd(service.Vxfld):
                                            '%s:%d', ip_addr, port)
 
     def __send_vxfld_proxy(self, vxlan_pkt, addr):
-        """ Generate a VXFLD Proxy packet and send it.
+        """ Generates and sends a VXFLD proxy packet to peer SNDs.
         :param vxlan_pkt: VXLAN data packet
-        :param addr: tuple composed of the sender's IP addr and source port
+        :param addr: tuple composed of the sender's IP addr and port
         """
         if self._conf.area is None:
             self._logger.error('Sending proxy packets requires config option '
@@ -888,12 +912,12 @@ class _Vxsnd(service.Vxfld):
 
     def __update_fdb(self, vni_dict, holdtime, identifier=_Fdb.DEFAULT_ID,
                      sync=True):
-        """ Updates the SND's fdb and sends a sync message to its peers.
-        :param vni_dict: a dictionary mapping a vni to a collection of ip
-                         addresses
+        """ Updates the SND's FDB and sends a sync message to its peers.
+        :param vni_dict: maps VNIs to IP addresses
+        :type vni_dict: dict[int, set[str]]
         :param holdtime: set to non-zero to add entries and 0 to remove them
-        :param identifier: identifies the RD. Set to DEFAULT_ID if addresses
-                           are to be added by the SND
+        :param identifier: identifies the source of an update. DEFAULT_ID is
+                           used when the source is the SND
         :param sync: set to True to send a sync message to peers
         :raises: socket.error when sync=True
         """
@@ -919,7 +943,7 @@ def main():
     """ Main method
     """
     prsr = utils.common_parser(NODE_TYPE)
-    # For running non-sudo.  Disables bind to raw socket
+    # For running non-sudo. Disables bind to raw socket.
     prsr.add_argument('-R', '--no-flood', action='store_true',
                       help='Turn off flooding')
     args = prsr.parse_args()
