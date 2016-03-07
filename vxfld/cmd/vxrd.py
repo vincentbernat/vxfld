@@ -70,6 +70,21 @@ class _BridgeUtils(object):
         if not self.set_hrep_macs():
             raise OSError('Failed to update bridge fdb')
 
+    def __batch_supported(self):
+        """ Checks to see if -batch is supported by the bridge cmd. Required
+        to get vxrd, with head_rep, working in ubuntu < 16.04
+        :return: True if batch mode is supported, False otherwise
+        """
+        cmd = '%s help' % self.__CMD_PATH
+        try:
+            bridgecmd = subprocess.Popen(cmd.split(),
+                                         stdout=subprocess.PIPE,
+                                         stderr=subprocess.STDOUT)
+            output = bridgecmd.communicate()[0]
+        except Exception:  # pylint: disable=broad-except
+            return False
+        return '-batch' in output
+
     def add_entry(self, operation, dev_name, ip_address):
         """ Appends an entry to the list of bridge fdb commands.
         :param operation: can be one of ADD and DEL
@@ -128,13 +143,27 @@ class _BridgeUtils(object):
         :raises OSError: when the operation fails
         """
         status = True
-        for idx in range(0, len(self.__entries), self.__MAX_CMDS_PER_BATCH):
-            with tempfile.NamedTemporaryFile('w', prefix='vxrd_tmp') as tmpf:
-                cmd = '%s -force -batch %s' % (self.__CMD_PATH, tmpf.name)
-                tmpf.writelines(
-                    self.__entries[idx:idx + self.__MAX_CMDS_PER_BATCH]
-                )
-                tmpf.flush()
+        batch = self.__batch_supported()
+        if batch:
+            for idx in range(0, len(self.__entries),
+                             self.__MAX_CMDS_PER_BATCH):
+                with tempfile.NamedTemporaryFile('w',
+                                                 prefix='vxrd_tmp') as tmpf:
+                    cmd = '%s -force -batch %s' % (self.__CMD_PATH, tmpf.name)
+                    tmpf.writelines(
+                        self.__entries[idx:idx + self.__MAX_CMDS_PER_BATCH]
+                    )
+                    tmpf.flush()
+                    try:
+                        subprocess.check_output(cmd.split(),
+                                                stderr=subprocess.STDOUT)
+                    except subprocess.CalledProcessError:
+                        status &= False
+                        if not self.__force:
+                            return False
+        else:
+            for line in self.__entries:
+                cmd = '%s -force %s' % (self.__CMD_PATH, line)
                 try:
                     subprocess.check_output(cmd.split(),
                                             stderr=subprocess.STDOUT)
