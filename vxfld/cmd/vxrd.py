@@ -53,6 +53,7 @@ class _BridgeUtils(object):
     )
     __CMD_PATH = '/sbin/bridge'
     __MAX_CMDS_PER_BATCH = 2000
+    __BATCH_MODE = None
 
     # Bridge fdb operations.
     ADD = 'append'
@@ -70,20 +71,25 @@ class _BridgeUtils(object):
         if not self.set_hrep_macs():
             raise OSError('Failed to update bridge fdb')
 
-    def __batch_supported(self):
+    @classmethod
+    def __batch_supported(cls):
         """ Checks to see if -batch is supported by the bridge cmd. Required
         to get vxrd, with head_rep, working in ubuntu < 16.04
         :return: True if batch mode is supported, False otherwise
         """
-        cmd = '%s help' % self.__CMD_PATH
-        try:
-            bridgecmd = subprocess.Popen(cmd.split(),
-                                         stdout=subprocess.PIPE,
-                                         stderr=subprocess.STDOUT)
-            output = bridgecmd.communicate()[0]
-        except Exception:  # pylint: disable=broad-except
-            return False
-        return '-batch' in output
+        if cls.__BATCH_MODE is not None:
+            return cls.__BATCH_MODE
+        else:
+            cmd = '%s help' % cls.__CMD_PATH
+            try:
+                bridgecmd = subprocess.Popen(cmd.split(),
+                                             stdout=subprocess.PIPE,
+                                             stderr=subprocess.STDOUT)
+                output = bridgecmd.communicate()[0]
+            except Exception:  # pylint: disable=broad-except
+                return False
+            cls.__BATCH_MODE = '-batch' in output
+            return cls.__BATCH_MODE
 
     def add_entry(self, operation, dev_name, ip_address):
         """ Appends an entry to the list of bridge fdb commands.
@@ -143,8 +149,7 @@ class _BridgeUtils(object):
         :raises OSError: when the operation fails
         """
         status = True
-        batch = self.__batch_supported()
-        if batch:
+        if self.__batch_supported():
             for idx in range(0, len(self.__entries),
                              self.__MAX_CMDS_PER_BATCH):
                 with tempfile.NamedTemporaryFile('w',
